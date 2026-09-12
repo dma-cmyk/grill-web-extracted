@@ -1,0 +1,433 @@
+import React, { useState, useEffect } from 'react';
+import { RoutePath } from '../../app/router';
+import { ApiProfile, ModelCacheItem } from '../../types/apiProfile';
+import { PromptProfile } from '../../types/promptProfile';
+import { SessionRecord, SelectionSnapshot } from '../../types/session';
+import { apiProfileRepo } from '../../storage/apiProfileRepo';
+import { promptProfileRepo } from '../../storage/promptProfileRepo';
+import { sessionRepo } from '../../storage/sessionRepo';
+import { inMemoryKeyStore } from '../../security/inMemoryKeyStore';
+import { MOCK_API_PROFILE } from '../../providers/mockProvider';
+import { Flame, Play, Sparkles, Sliders, ShieldCheck, Key, ArrowRight, HelpCircle } from 'lucide-react';
+
+interface StartViewProps {
+  onNavigate: (route: RoutePath) => void;
+}
+
+const SAMPLE_THEMES = [
+  '下流AIコーディングエージェント向けに、曖昧な要求を対話型ヒアリングで仕様化するWebアプリ',
+  'ブラウザのIndexedDBを活用した、完全ローカル完結型のセキュアなMarkdownメモ管理ツール',
+  'CORS対応のOpenAI互換APIへ直接ストリーミング接続できる、軽量テストクライアント',
+];
+
+export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
+  const [theme, setTheme] = useState('');
+  const [depth, setDepth] = useState<SelectionSnapshot['depth']>('standard');
+  const [apiProfiles, setApiProfiles] = useState<ApiProfile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>('');
+  const [cachedModels, setCachedModels] = useState<ModelCacheItem[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [customModelInput, setCustomModelInput] = useState<string>('');
+  const [promptProfiles, setPromptProfiles] = useState<PromptProfile[]>([]);
+  const [selectedPromptId, setSelectedPromptId] = useState<string>('');
+  const [sessionApiKey, setSessionApiKey] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function init() {
+      setLoading(true);
+      let profiles = await apiProfileRepo.getAll();
+      if (profiles.length === 0) {
+        // Seed default mock simulator so the app is immediately usable
+        await apiProfileRepo.save(MOCK_API_PROFILE);
+        await apiProfileRepo.saveCachedModels(MOCK_API_PROFILE.id, [
+          { id: 'mock-grill-fast', name: 'Grill Simulator (Fast 2-Round)' },
+          { id: 'mock-grill-deep', name: 'Grill Simulator (Thorough 3-Round)' },
+        ]);
+        profiles = await apiProfileRepo.getAll();
+      }
+      setApiProfiles(profiles);
+
+      const defaultProfile = profiles[0];
+      if (defaultProfile) {
+        setSelectedProfileId(defaultProfile.id);
+        const models = await apiProfileRepo.getCachedModels(defaultProfile.id);
+        setCachedModels(models);
+        if (models.length > 0) {
+          setSelectedModelId(models[0].modelId);
+        } else {
+          setSelectedModelId('gpt-4o');
+        }
+      }
+
+      const prompts = await promptProfileRepo.getAll();
+      setPromptProfiles(prompts);
+      if (prompts.length > 0) {
+        setSelectedPromptId(prompts[0].id);
+      }
+
+      setLoading(false);
+    }
+    init();
+  }, []);
+
+  const handleProfileChange = async (profileId: string) => {
+    setSelectedProfileId(profileId);
+    const models = await apiProfileRepo.getCachedModels(profileId);
+    setCachedModels(models);
+    if (models.length > 0) {
+      setSelectedModelId(models[0].modelId);
+    } else {
+      setSelectedModelId('gpt-4o');
+    }
+  };
+
+  const selectedProfile = apiProfiles.find((p) => p.id === selectedProfileId);
+  const needsSessionKey =
+    selectedProfile &&
+    selectedProfile.id !== MOCK_API_PROFILE.id &&
+    !selectedProfile.rememberKey &&
+    !inMemoryKeyStore.has(selectedProfile.id);
+
+  const handleStartGrill = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    if (!theme.trim()) {
+      setFormError('検討したいテーマを入力してください');
+      return;
+    }
+
+    if (!selectedProfile) {
+      setFormError('API Profile を選択してください');
+      return;
+    }
+
+    if (needsSessionKey && !sessionApiKey.trim()) {
+      setFormError('このAPI Profile用のAPIキーを入力してください');
+      return;
+    }
+
+    const effectiveModel = selectedModelId === '__custom__' ? customModelInput.trim() : selectedModelId;
+    if (!effectiveModel) {
+      setFormError('モデルを選択または入力してください');
+      return;
+    }
+
+    const promptProfile = promptProfiles.find((p) => p.id === selectedPromptId) || promptProfiles[0];
+    if (!promptProfile) {
+      setFormError('Prompt Profile を選択してください');
+      return;
+    }
+
+    // Save in-memory key if provided
+    if (sessionApiKey.trim()) {
+      inMemoryKeyStore.set(selectedProfile.id, sessionApiKey.trim());
+    }
+
+    setSubmitting(true);
+
+    const sessionId = 'session-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 7);
+    const snapshot: SelectionSnapshot = {
+      apiProfileId: selectedProfile.id,
+      apiProfileName: selectedProfile.name,
+      baseUrl: selectedProfile.baseUrl,
+      modelId: effectiveModel,
+      modelName: effectiveModel,
+      promptProfileId: promptProfile.id,
+      promptProfileName: promptProfile.name,
+      depth,
+    };
+
+    // Auto title from theme (first line or truncated)
+    const title = theme.split('\n')[0].slice(0, 40) || '無題のGrillセッション';
+
+    const newSession: SessionRecord = {
+      id: sessionId,
+      title,
+      theme: theme.trim(),
+      status: 'draft',
+      selectionSnapshot: snapshot,
+      promptSnapshot: promptProfile.systemPrompt,
+      messages: [],
+      rounds: [],
+      decisions: [],
+      assumptions: [],
+      conflicts: [],
+      openIssues: [],
+      currentRound: 0,
+      progress: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    await sessionRepo.save(newSession);
+
+    // Navigate to grill screen
+    onNavigate({ route: 'grill', sessionId });
+  };
+
+  if (loading) {
+    return <div className="text-center py-20 text-slate-400">初期化中...</div>;
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 space-y-8">
+      {/* Hero card */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-700/60 relative overflow-hidden">
+        <div className="relative z-10 max-w-2xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 border border-orange-500/30 text-orange-400 text-xs font-semibold tracking-wide">
+            <Flame className="w-3.5 h-3.5" />
+            対話型要件具体化ツール
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white leading-tight">
+            曖昧なアイデアを磨き上げ、<br className="hidden sm:block" />
+            実行可能なAIエージェント仕様書へ。
+          </h1>
+          <p className="text-sm text-slate-300 leading-relaxed">
+            AIからの鋭い質問と推奨回答を重ねることで、仕様の抜け漏れ・技術的トレードオフを最短で決定。完成した仕様はワンクリックで下流エージェント用プロンプトとして出力されます。
+          </p>
+        </div>
+      </div>
+
+      <form onSubmit={handleStartGrill} className="space-y-6">
+        {/* Theme input */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <label htmlFor="theme-input" className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-orange-500" />
+              1. 検討したいテーマ・作りたいもの *
+            </label>
+            <span className="text-xs text-slate-400">具体的でも粗削りでもOK</span>
+          </div>
+
+          <textarea
+            id="theme-input"
+            rows={4}
+            required
+            value={theme}
+            onChange={(e) => setTheme(e.target.value)}
+            placeholder="例: 「社内用のFAQボットを作りたいが、APIキー管理とセキュリティの要件、およびMVPとしての最小スコープを明確にしたい」"
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 leading-relaxed"
+          />
+
+          {/* Sample themes */}
+          <div className="space-y-1.5 pt-1">
+            <p className="text-xs text-slate-500 font-medium flex items-center gap-1">
+              <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
+              サンプルのテーマから選ぶ:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {SAMPLE_THEMES.map((s, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setTheme(s)}
+                  className="text-xs bg-slate-100 hover:bg-orange-50 hover:text-orange-700 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors text-left cursor-pointer"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Configuration grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Depth selection */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <label className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-orange-500" />
+              2. ヒアリング深度 (Depth)
+            </label>
+
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setDepth('quick')}
+                className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                  depth === 'quick'
+                    ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs'
+                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                }`}
+              >
+                <div className="text-sm">Quick</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">1〜2回</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDepth('standard')}
+                className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                  depth === 'standard'
+                    ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs'
+                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                }`}
+              >
+                <div className="text-sm">Standard</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">2〜3回 (推奨)</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDepth('deep')}
+                className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                  depth === 'deep'
+                    ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs'
+                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                }`}
+              >
+                <div className="text-sm">Deep</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">4〜6回</div>
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              ラウンド数を目安とし、AIが十分に仕様が固まったと判断した時点で自動完了します。
+            </p>
+          </div>
+
+          {/* Prompt profile selection */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-orange-500" />
+                3. Prompt Profile
+              </label>
+              <button
+                type="button"
+                onClick={() => onNavigate({ route: 'settings-prompts' })}
+                className="text-xs text-orange-600 hover:underline font-medium"
+              >
+                編集・追加
+              </button>
+            </div>
+
+            <select
+              value={selectedPromptId}
+              onChange={(e) => setSelectedPromptId(e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30"
+            >
+              {promptProfiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} {p.builtIn ? '(組み込み)' : '(カスタム)'}
+                </option>
+              ))}
+            </select>
+
+            <p className="text-xs text-slate-500 line-clamp-2">
+              {promptProfiles.find((p) => p.id === selectedPromptId)?.description}
+            </p>
+          </div>
+
+          {/* API profile selection */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Key className="w-4 h-4 text-orange-500" />
+                4. API Profile
+              </label>
+              <button
+                type="button"
+                onClick={() => onNavigate({ route: 'settings-apis' })}
+                className="text-xs text-orange-600 hover:underline font-medium"
+              >
+                管理・追加
+              </button>
+            </div>
+
+            <select
+              value={selectedProfileId}
+              onChange={(e) => handleProfileChange(e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30"
+            >
+              {apiProfiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.id === MOCK_API_PROFILE.id ? '内蔵モック' : p.baseUrl})
+                </option>
+              ))}
+            </select>
+
+            {/* In-memory key input if needed */}
+            {needsSessionKey && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1.5">
+                <label className="block text-xs font-semibold text-amber-900">
+                  このセッション用のAPIキー (メモリ内保持)
+                </label>
+                <input
+                  type="password"
+                  placeholder="sk-..."
+                  value={sessionApiKey}
+                  onChange={(e) => setSessionApiKey(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-amber-300 rounded-lg text-xs font-mono bg-white"
+                />
+                <p className="text-[11px] text-amber-800">
+                  ※ このProfileはブラウザ保存が無効のため、現在のタブメモリでのみ利用されます。
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Model selection */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <label className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Play className="w-4 h-4 text-orange-500" />
+              5. 使用モデル
+            </label>
+
+            <div className="space-y-2">
+              <select
+                value={selectedModelId}
+                onChange={(e) => setSelectedModelId(e.target.value)}
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30"
+              >
+                {cachedModels.map((m) => (
+                  <option key={m.modelId} value={m.modelId}>
+                    {m.displayName}
+                  </option>
+                ))}
+                <option value="__custom__">-- 手動入力 (直接指定) --</option>
+              </select>
+
+              {selectedModelId === '__custom__' && (
+                <input
+                  type="text"
+                  placeholder="例: gpt-4o-mini, claude-3-5-sonnet, llama-3"
+                  value={customModelInput}
+                  onChange={(e) => setCustomModelInput(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono"
+                />
+              )}
+            </div>
+            <p className="text-xs text-slate-500">
+              {cachedModels.length > 0
+                ? `${cachedModels.length}件の取得済みモデルから選択中`
+                : 'モデル一覧は「API設定」画面で取得・更新できます'}
+            </p>
+          </div>
+        </div>
+
+        {formError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium">
+            {formError}
+          </div>
+        )}
+
+        {/* Start button */}
+        <div className="flex justify-end pt-2">
+          <button
+            id="start-grill-btn"
+            type="submit"
+            disabled={submitting}
+            className="w-full sm:w-auto px-8 py-3.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-base rounded-xl shadow-lg shadow-orange-600/20 flex items-center justify-center gap-2 transition-transform active:scale-98 cursor-pointer"
+          >
+            <Flame className="w-5 h-5" />
+            <span>Grill を開始する</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
