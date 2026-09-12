@@ -5,6 +5,7 @@ import { getProviderForProfile } from '../../providers';
 import { maskSecret, validateBaseUrl } from '../../security/masking';
 import { inMemoryKeyStore } from '../../security/inMemoryKeyStore';
 import { MOCK_API_PROFILE } from '../../providers/mockProvider';
+import { Dialog } from '../../components/Dialog';
 import { Key, Plus, Trash2, Edit2, CheckCircle2, AlertTriangle, RefreshCw, Server, ShieldAlert, Cpu } from 'lucide-react';
 
 export const ApiProfilesView: React.FC = () => {
@@ -311,6 +312,7 @@ export const ApiProfilesView: React.FC = () => {
                     onClick={() => handleFetchModels(p)}
                     disabled={fetchingModels}
                     title="モデル一覧を再取得"
+                    aria-label="モデル一覧を再取得"
                     className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 text-xs flex items-center gap-1 cursor-pointer"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${fetchingModels ? 'animate-spin' : ''}`} />
@@ -341,10 +343,15 @@ export const ApiProfilesView: React.FC = () => {
 
       {/* Delete confirmation modal */}
       {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4">
-            <h3 className="text-lg font-bold text-slate-900">Profileの削除確認</h3>
-            <p className="text-sm text-slate-600 leading-relaxed">
+        <Dialog
+          onClose={() => setDeleteConfirmId(null)}
+          titleId="api-profile-delete-title"
+          descriptionId="api-profile-delete-desc"
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4"
+          panelClassName="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4"
+        >
+            <h3 id="api-profile-delete-title" className="text-lg font-bold text-slate-900">Profileの削除確認</h3>
+            <p id="api-profile-delete-desc" className="text-sm text-slate-600 leading-relaxed">
               このAPI Profileと関連するモデルキャッシュを削除しますか？<br />
               <span className="text-xs text-slate-500">※ このProfileを使用して作成された過去のセッションデータは削除されず保持されます。</span>
             </p>
@@ -362,16 +369,19 @@ export const ApiProfilesView: React.FC = () => {
                 削除する
               </button>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Edit / Create Profile Modal */}
       {editingProfile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 my-8">
+        <Dialog
+          onClose={() => setEditingProfile(null)}
+          titleId="api-profile-edit-title"
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto"
+          panelClassName="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 my-8"
+        >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-lg font-bold text-slate-900">
+              <h2 id="api-profile-edit-title" className="text-lg font-bold text-slate-900">
                 {editingProfile.id ? 'API Profile の編集' : '新規 API Profile の登録'}
               </h2>
               <button
@@ -500,6 +510,7 @@ export const ApiProfilesView: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => removeHeaderRow(idx)}
+                          aria-label="このカスタムヘッダー行を削除"
                           className="text-slate-400 hover:text-red-600 p-1 cursor-pointer"
                         >
                           ✕
@@ -558,8 +569,7 @@ export const ApiProfilesView: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );
