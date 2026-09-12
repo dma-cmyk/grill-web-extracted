@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { RoutePath } from '../../app/router';
 import { SessionRecord } from '../../types/session';
 import { sessionRepo } from '../../storage/sessionRepo';
+import { Dialog } from '../../components/Dialog';
 import {
   Layers,
   Search,
@@ -197,6 +198,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({ onNavigate }) => {
                     onClick={() => setDeleteTargetId(s.id)}
                     className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl border border-red-200 text-xs cursor-pointer"
                     title="削除"
+                    aria-label="このセッションを削除"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -209,10 +211,15 @@ export const SessionsView: React.FC<SessionsViewProps> = ({ onNavigate }) => {
 
       {/* Delete confirmation modal */}
       {deleteTargetId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4">
-            <h3 className="text-base font-bold text-slate-900">セッションの削除確認</h3>
-            <p className="text-sm text-slate-600 leading-relaxed">
+        <Dialog
+          onClose={() => setDeleteTargetId(null)}
+          titleId="session-delete-title"
+          descriptionId="session-delete-desc"
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4"
+          panelClassName="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4"
+        >
+            <h3 id="session-delete-title" className="text-base font-bold text-slate-900">セッションの削除確認</h3>
+            <p id="session-delete-desc" className="text-sm text-slate-600 leading-relaxed">
               このGrillセッションとそのヒアリング履歴・確定事項を削除しますか？<br />
               <span className="text-xs text-red-600">※ この操作は取り消せません。</span>
             </p>
@@ -230,8 +237,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({ onNavigate }) => {
                 削除する
               </button>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );
