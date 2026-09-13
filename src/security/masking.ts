@@ -32,23 +32,30 @@ export function maskPlainSecrets(text: string, secrets: Array<string | undefined
   return result;
 }
 
-/** Replace secrets in JSON/SSE wire text, preserving structural syntax. */
+/** Mask only JSON/SSE string value tokens, preserving keys and wire structure. */
 export function maskSecrets(text: string, secrets: Array<string | undefined> = []): string {
   if (!text || secrets.length === 0) return text;
-  const unique = Array.from(new Set(secrets.map((secret) => secret?.trim()).filter((secret): secret is string => !!secret)))
-    .sort((a, b) => b.length - a.length);
-  const masks = unique.map((secret) => ({ secret, mask: maskSecret(secret), escaped: JSON.stringify(secret).slice(1, -1) }));
+  const unique = Array.from(new Set(secrets.map((secret) => secret?.trim()).filter((secret): secret is string => !!secret)));
   let result = '';
   let index = 0;
   while (index < text.length) {
-    const existing = masks.find(({ mask }) => text.startsWith(mask, index));
-    if (existing) { result += existing.mask; index += existing.mask.length; continue; }
-    let match: { length: number; replacement: string } | undefined;
-    for (const { secret, mask, escaped } of masks) {
-      if (!/["\\\u0000-\u001f]/.test(secret) && text.startsWith(secret, index) && (!match || secret.length > match.length)) match = { length: secret.length, replacement: mask };
-      if (escaped !== secret && text.startsWith(escaped, index) && (!match || escaped.length > match.length)) match = { length: escaped.length, replacement: JSON.stringify(mask).slice(1, -1) };
+    if (text[index] !== '"') { result += text[index++]; continue; }
+    const start = index++;
+    let escaped = false;
+    while (index < text.length) {
+      const char = text[index++];
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') break;
     }
-    if (match) { result += match.replacement; index += match.length; } else result += text[index++];
+    const rawToken = text.slice(start, index);
+    let decoded: string;
+    try { decoded = JSON.parse(rawToken); } catch { result += rawToken; continue; }
+    let cursor = index;
+    while (/\s/.test(text[cursor] || '')) cursor += 1;
+    if (text[cursor] === ':') { result += rawToken; continue; }
+    const masked = maskPlainSecrets(decoded, unique);
+    result += JSON.stringify(masked);
   }
   return result;
 }
