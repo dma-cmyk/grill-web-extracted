@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PromptProfile } from '../../types/promptProfile';
 import { promptProfileRepo } from '../../storage/promptProfileRepo';
 import { FileCode, Plus, Copy, Trash2, Edit3, ShieldCheck } from 'lucide-react';
+import { Dialog } from '../../components/Dialog';
 
 export const PromptProfilesView: React.FC = () => {
   const [prompts, setPrompts] = useState<PromptProfile[]>([]);
@@ -149,12 +150,17 @@ export const PromptProfilesView: React.FC = () => {
 
       {/* Preview prompt modal */}
       {previewPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8">
+        <Dialog
+          onClose={() => setPreviewPrompt(null)}
+          titleId="prompt-preview-title"
+          descriptionId="prompt-preview-desc"
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto"
+          panelClassName="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8"
+        >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <h3 className="text-base font-bold text-slate-900">{previewPrompt.name}</h3>
-                <p className="text-xs text-slate-500">{previewPrompt.description}</p>
+                <h3 id="prompt-preview-title" className="text-base font-bold text-slate-900">{previewPrompt.name}</h3>
+                <p id="prompt-preview-desc" className="text-xs text-slate-500">{previewPrompt.description}</p>
               </div>
               <button
                 onClick={() => setPreviewPrompt(null)}
@@ -174,16 +180,19 @@ export const PromptProfilesView: React.FC = () => {
                 閉じる
               </button>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Edit custom prompt modal */}
       {editingPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8">
+        <Dialog
+          onClose={() => setEditingPrompt(null)}
+          titleId="prompt-edit-title"
+          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto"
+          panelClassName="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8"
+        >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-lg font-bold text-slate-900">
+              <h2 id="prompt-edit-title" className="text-lg font-bold text-slate-900">
                 {editingPrompt.id ? 'カスタム Prompt の編集' : '新規カスタム Prompt の作成'}
               </h2>
               <button
@@ -255,8 +264,7 @@ export const PromptProfilesView: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );
