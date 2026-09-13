@@ -19,6 +19,15 @@ export const ApiProfilesView: React.FC = () => {
   const [cachedModels, setCachedModels] = useState<Record<string, ModelCacheItem[]>>({});
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
+  const refreshUrlValidation = (baseUrl: string | undefined, apiKey: string, headers: CustomHeader[]) => {
+    if (!baseUrl) {
+      setUrlError(null);
+      return;
+    }
+    const hasCredentials = !!apiKey.trim() || headers.some((header) => !!header.value.trim());
+    const check = validateBaseUrl(baseUrl, hasCredentials);
+    setUrlError(check.valid ? null : check.error || '無効なURL形式です');
+  };
 
   const loadProfiles = async () => {
     setLoading(true);
@@ -72,12 +81,14 @@ export const ApiProfilesView: React.FC = () => {
   const handleBaseUrlChange = (val: string) => {
     if (editingProfile) {
       setEditingProfile({ ...editingProfile, baseUrl: val });
-      const hasCredentials = !!tempApiKey.trim() || (editingProfile.headers || []).some((header) => !!header.value.trim());
-      const check = validateBaseUrl(val, hasCredentials);
-      setUrlError(check.valid ? null : check.error || '無効なURL形式です');
+      refreshUrlValidation(val, tempApiKey, editingProfile.headers || []);
     }
   };
 
+  const handleApiKeyChange = (value: string) => {
+    setTempApiKey(value);
+    if (editingProfile) refreshUrlValidation(editingProfile.baseUrl, value, editingProfile.headers || []);
+  };
   const handleTestConnection = async () => {
     if (!editingProfile?.baseUrl) return;
     const hasCredentials = !!tempApiKey.trim() || (editingProfile.headers || []).some((header) => !!header.value.trim());
@@ -192,11 +203,9 @@ export const ApiProfilesView: React.FC = () => {
 
   const addHeaderRow = () => {
     if (!editingProfile) return;
-    const current = editingProfile.headers || [];
-    setEditingProfile({
-      ...editingProfile,
-      headers: [...current, { key: '', value: '' }],
-    });
+    const headers = [...(editingProfile.headers || []), { key: '', value: '' }];
+    setEditingProfile({ ...editingProfile, headers });
+    refreshUrlValidation(editingProfile.baseUrl, tempApiKey, headers);
   };
 
   const updateHeaderRow = (index: number, key: string, value: string) => {
@@ -204,6 +213,7 @@ export const ApiProfilesView: React.FC = () => {
     const headers = [...(editingProfile.headers || [])];
     headers[index] = { key, value };
     setEditingProfile({ ...editingProfile, headers });
+    refreshUrlValidation(editingProfile.baseUrl, tempApiKey, headers);
   };
 
   const removeHeaderRow = (index: number) => {
@@ -211,6 +221,7 @@ export const ApiProfilesView: React.FC = () => {
     const headers = [...(editingProfile.headers || [])];
     headers.splice(index, 1);
     setEditingProfile({ ...editingProfile, headers });
+    refreshUrlValidation(editingProfile.baseUrl, tempApiKey, headers);
   };
 
   return (
@@ -448,7 +459,7 @@ export const ApiProfilesView: React.FC = () => {
                   autoComplete="off"
                   placeholder="sk-..."
                   value={tempApiKey}
-                  onChange={(e) => setTempApiKey(e.target.value)}
+                  onChange={(e) => handleApiKeyChange(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
