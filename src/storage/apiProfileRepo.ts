@@ -1,7 +1,7 @@
 import { db } from './db';
 import { ApiProfile, ModelCacheItem } from '../types/apiProfile';
 import { inMemoryKeyStore } from '../security/inMemoryKeyStore';
-import { maskPlainSecrets, maskSecrets } from '../security/masking';
+import { maskPlainSecrets } from '../security/masking';
 
 const withMemoryCredentials = (profile: ApiProfile): ApiProfile => {
   if (profile.rememberKey) return profile;

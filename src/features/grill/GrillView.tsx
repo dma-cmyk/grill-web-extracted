@@ -10,7 +10,7 @@ import { getProviderForProfile } from '../../providers';
 import { buildInitialMessages, buildAnswersMessage } from '../../core/promptBuilder';
 import { parseAndValidateGrillRound, buildRepairMessage } from '../../core/responseParser';
 import { generateAgentHandoffPrompt } from '../../core/handoffGenerator';
-import { maskSecrets } from '../../security/masking';
+import { maskStreamingText } from '../../security/masking';
 import {
   Flame,
   CheckCircle2,
@@ -135,10 +135,10 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       onChunk: (chunk, accumulated) => {
         // Discard if superseded by a newer request
         if (activeRequestIdRef.current !== requestId) return;
-        onProgress(maskSecrets(chunk, secrets), maskSecrets(accumulated, secrets));
+        onProgress(maskStreamingText(chunk, secrets), maskStreamingText(accumulated, secrets));
       },
     });
-    return maskSecrets(output, secrets);
+    return maskStreamingText(output, secrets);
   };
 
   /**

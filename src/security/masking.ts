@@ -60,6 +60,11 @@ export function maskSecrets(text: string, secrets: Array<string | undefined> = [
   return result;
 }
 
+/** Mask partial/non-JSON response text without rewriting its syntax. */
+export function maskStreamingText(text: string, secrets: Array<string | undefined> = []): string {
+  return maskPlainSecrets(text, secrets);
+}
+
 export function validateBaseUrl(url: string, hasCredentials: boolean): { valid: boolean; error?: string } {
   if (!url || typeof url !== 'string') {
     return { valid: false, error: 'URLを入力してください' };
