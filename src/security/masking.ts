@@ -14,12 +14,24 @@ export function maskSecret(secret?: string): string {
   return `${prefix}••••••••${suffix}`;
 }
 
-/** Replace every occurrence of the supplied secrets without interpreting them as regexes. */
+/** Replace literal and JSON-escaped secret occurrences with one canonical mask. */
 export function maskSecrets(text: string, secrets: Array<string | undefined> = []): string {
   if (!text || secrets.length === 0) return text;
   const unique = Array.from(new Set(secrets.map((secret) => secret?.trim()).filter((secret): secret is string => !!secret)))
     .sort((a, b) => b.length - a.length);
-  return unique.reduce((result, secret) => result.replaceAll(secret, maskSecret(secret)), text);
+  const protectedMasks: string[] = [];
+  let result = text.replace(/[^\s"']{3}••••••••[^\s"']{4}|••••••••/g, (value) => {
+    const token = `__GRILL_MASK_${protectedMasks.length}__`;
+    protectedMasks.push(value);
+    return token;
+  });
+  for (const secret of unique) {
+    const masked = maskSecret(secret);
+    result = result.replaceAll(secret, masked);
+    const escaped = JSON.stringify(secret).slice(1, -1);
+    if (escaped !== secret) result = result.replaceAll(escaped, JSON.stringify(masked).slice(1, -1));
+  }
+  return result.replace(/__GRILL_MASK_(\d+)__/g, (_match, index: string) => protectedMasks[Number(index)]);
 }
 
 export function validateBaseUrl(url: string, hasCredentials: boolean): { valid: boolean; error?: string } {

@@ -126,7 +126,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    return await provider.chat({
+    const output = await provider.chat({
       profile,
       apiKey: effectiveKey,
       model: s.selectionSnapshot.modelId,
@@ -134,9 +134,11 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       signal: controller.signal,
       onChunk: (chunk, accumulated) => {
         // Discard if superseded by a newer request
+        if (activeRequestIdRef.current !== requestId) return;
         onProgress(maskSecrets(chunk, secrets), maskSecrets(accumulated, secrets));
       },
     });
+    return maskSecrets(output, secrets);
   };
 
   /**
