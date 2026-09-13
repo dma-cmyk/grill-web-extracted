@@ -162,6 +162,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     try {
       // Step: receiving
       await updateSession((curr) => ({ ...curr, status: 'receiving' }));
+      if (activeRequestIdRef.current !== reqId) return;
 
       lastRequestRef.current = {
         requestSession: updatedSession,
@@ -176,6 +177,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
 
       // Step: parsing
       await updateSession((curr) => ({ ...curr, status: 'parsing', lastRawResponse: fullOutput }));
+      if (activeRequestIdRef.current !== reqId) return;
 
       await handleReceivedResponse(fullOutput, updatedSession, reqId, false);
     } catch (err: any) {
@@ -248,6 +250,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       }
 
       await updateSession(() => nextSession);
+      if (activeRequestIdRef.current !== reqId) return;
       setStreamingText('');
 
       // Initialize answers for the new round's questions
@@ -309,6 +312,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       status: 'receiving' as GrillStatus,
     };
     await updateSession(() => sessionWithRepair);
+    if (activeRequestIdRef.current !== reqId) return;
     setStreamingText('修復リクエストを実行中...');
 
     try {
@@ -405,6 +409,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
 
     try {
       await updateSession((curr) => ({ ...curr, status: 'receiving' }));
+      if (activeRequestIdRef.current !== reqId) return;
 
       lastRequestRef.current = {
         requestSession: sessionAfterAnswer,
@@ -418,6 +423,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       if (activeRequestIdRef.current !== reqId) return;
 
       await updateSession((curr) => ({ ...curr, status: 'parsing', lastRawResponse: fullOutput }));
+      if (activeRequestIdRef.current !== reqId) return;
 
       await handleReceivedResponse(fullOutput, sessionAfterAnswer, reqId, false);
     } catch (err: any) {
@@ -485,6 +491,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       if (activeRequestIdRef.current !== reqId) return;
 
       await updateSession((curr) => ({ ...curr, status: 'parsing', lastRawResponse: fullOutput }));
+      if (activeRequestIdRef.current !== reqId) return;
       await handleReceivedResponse(fullOutput, snapshot.baseSession, reqId, snapshot.isRepairAttempt);
     } catch (err: unknown) {
       if (activeRequestIdRef.current !== reqId) return;
