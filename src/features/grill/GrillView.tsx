@@ -155,6 +155,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       currentRound: 1,
     };
     await updateSession(() => updatedSession);
+    if (activeRequestIdRef.current !== reqId) return;
 
     setStreamingText('');
 
@@ -399,6 +400,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     };
 
     await updateSession(() => sessionAfterAnswer);
+    if (activeRequestIdRef.current !== reqId) return;
     setStreamingText('');
 
     try {
@@ -472,7 +474,9 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
 
     try {
       await updateSession((curr) => ({ ...curr, status: 'requesting' }));
+      if (activeRequestIdRef.current !== reqId) return;
       await updateSession((curr) => ({ ...curr, status: 'receiving' }));
+      if (activeRequestIdRef.current !== reqId) return;
 
       const fullOutput = await executeLlmCall(snapshot.requestSession, reqId, (_chunk, accumulated) => {
         setStreamingText(accumulated);
