@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ApiProfile, CustomHeader, ModelCacheItem } from '../../types/apiProfile';
 import { apiProfileRepo } from '../../storage/apiProfileRepo';
 import { getProviderForProfile } from '../../providers';
-import { maskSecret, validateBaseUrl } from '../../security/masking';
+import { maskSecret, maskSecrets, validateBaseUrl } from '../../security/masking';
 import { inMemoryKeyStore } from '../../security/inMemoryKeyStore';
 import { MOCK_API_PROFILE } from '../../providers/mockProvider';
 import { Dialog } from '../../components/Dialog';
@@ -135,7 +135,9 @@ export const ApiProfilesView: React.FC = () => {
       const provider = getProviderForProfile(profile);
       const effectiveKey = keyToUse || profile.apiKey || inMemoryKeyStore.get(profile.id);
       const models = await provider.listModels(profile, effectiveKey);
-      await apiProfileRepo.saveCachedModels(profile.id, models);
+      const secrets = [effectiveKey, profile.apiKey, ...(profile.headers || []).map((header) => header.value), ...(inMemoryKeyStore.getHeaders(profile.id) || []).map((header) => header.value)];
+      const maskedModels = models.map((model) => ({ id: maskSecrets(model.id, secrets), name: maskSecrets(model.name, secrets) }));
+      await apiProfileRepo.saveCachedModels(profile.id, maskedModels);
 
       const updatedCache = await apiProfileRepo.getCachedModels(profile.id);
       setCachedModels((prev) => ({ ...prev, [profile.id]: updatedCache }));

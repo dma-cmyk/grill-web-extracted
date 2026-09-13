@@ -10,6 +10,7 @@ import { getProviderForProfile } from '../../providers';
 import { buildInitialMessages, buildAnswersMessage } from '../../core/promptBuilder';
 import { parseAndValidateGrillRound, buildRepairMessage } from '../../core/responseParser';
 import { generateAgentHandoffPrompt } from '../../core/handoffGenerator';
+import { maskSecrets } from '../../security/masking';
 import {
   Flame,
   CheckCircle2,
@@ -119,6 +120,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     }
 
     const effectiveKey = profile.apiKey || inMemoryKeyStore.get(profile.id);
+    const secrets = [effectiveKey, profile.apiKey, ...(profile.headers || []).map((header) => header.value), ...(inMemoryKeyStore.getHeaders(profile.id) || []).map((header) => header.value)];
     const provider = getProviderForProfile(profile);
 
     const controller = new AbortController();
@@ -132,8 +134,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       signal: controller.signal,
       onChunk: (chunk, accumulated) => {
         // Discard if superseded by a newer request
-        if (activeRequestIdRef.current !== requestId) return;
-        onProgress(chunk, accumulated);
+        onProgress(maskSecrets(chunk, secrets), maskSecrets(accumulated, secrets));
       },
     });
   };

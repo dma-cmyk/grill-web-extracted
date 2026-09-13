@@ -14,6 +14,14 @@ export function maskSecret(secret?: string): string {
   return `${prefix}••••••••${suffix}`;
 }
 
+/** Replace every occurrence of the supplied secrets without interpreting them as regexes. */
+export function maskSecrets(text: string, secrets: Array<string | undefined> = []): string {
+  if (!text || secrets.length === 0) return text;
+  const unique = Array.from(new Set(secrets.map((secret) => secret?.trim()).filter((secret): secret is string => !!secret)))
+    .sort((a, b) => b.length - a.length);
+  return unique.reduce((result, secret) => result.replaceAll(secret, maskSecret(secret)), text);
+}
+
 export function validateBaseUrl(url: string, hasCredentials: boolean): { valid: boolean; error?: string } {
   if (!url || typeof url !== 'string') {
     return { valid: false, error: 'URLを入力してください' };
