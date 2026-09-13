@@ -65,6 +65,24 @@ export function maskStreamingText(text: string, secrets: Array<string | undefine
   return maskPlainSecrets(text, secrets);
 }
 
+/** Preserve structured response syntax when possible, otherwise mask plain text. */
+export function maskResponseText(text: string, secrets: Array<string | undefined> = []): string {
+  const trimmed = text.trim();
+  if (!trimmed) return text;
+  try {
+    JSON.parse(trimmed);
+    return maskSecrets(text, secrets);
+  } catch {
+    const fenced = trimmed.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    try {
+      JSON.parse(fenced);
+      return maskSecrets(text, secrets);
+    } catch {
+      return maskPlainSecrets(text, secrets);
+    }
+  }
+}
+
 export function validateBaseUrl(url: string, hasCredentials: boolean): { valid: boolean; error?: string } {
   if (!url || typeof url !== 'string') {
     return { valid: false, error: 'URLを入力してください' };

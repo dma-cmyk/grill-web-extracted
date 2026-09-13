@@ -10,7 +10,7 @@ import { getProviderForProfile } from '../../providers';
 import { buildInitialMessages, buildAnswersMessage } from '../../core/promptBuilder';
 import { parseAndValidateGrillRound, buildRepairMessage } from '../../core/responseParser';
 import { generateAgentHandoffPrompt } from '../../core/handoffGenerator';
-import { maskStreamingText } from '../../security/masking';
+import { maskResponseText, maskStreamingText } from '../../security/masking';
 import {
   Flame,
   CheckCircle2,
@@ -138,7 +138,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
         onProgress(maskStreamingText(chunk, secrets), maskStreamingText(accumulated, secrets));
       },
     });
-    return maskStreamingText(output, secrets);
+    return maskResponseText(output, secrets);
   };
 
   /**
