@@ -14,24 +14,40 @@ export function maskSecret(secret?: string): string {
   return `${prefix}••••••••${suffix}`;
 }
 
-/** Replace literal and JSON-escaped secret occurrences with one canonical mask. */
+/** Replace literal and JSON-escaped secret occurrences in one pass. */
 export function maskSecrets(text: string, secrets: Array<string | undefined> = []): string {
   if (!text || secrets.length === 0) return text;
   const unique = Array.from(new Set(secrets.map((secret) => secret?.trim()).filter((secret): secret is string => !!secret)))
     .sort((a, b) => b.length - a.length);
-  const protectedMasks: string[] = [];
-  let result = text.replace(/[^\s"']{3}••••••••[^\s"']{4}|••••••••/g, (value) => {
-    const token = `__GRILL_MASK_${protectedMasks.length}__`;
-    protectedMasks.push(value);
-    return token;
-  });
-  for (const secret of unique) {
-    const masked = maskSecret(secret);
-    result = result.replaceAll(secret, masked);
-    const escaped = JSON.stringify(secret).slice(1, -1);
-    if (escaped !== secret) result = result.replaceAll(escaped, JSON.stringify(masked).slice(1, -1));
+  const masks = unique.map((secret) => ({ secret, mask: maskSecret(secret), escaped: JSON.stringify(secret).slice(1, -1) }));
+  let result = '';
+  let index = 0;
+  while (index < text.length) {
+    const existing = masks.find(({ mask }) => text.startsWith(mask, index));
+    if (existing) {
+      result += existing.mask;
+      index += existing.mask.length;
+      continue;
+    }
+    let match: { length: number; replacement: string } | undefined;
+    for (const { secret, mask, escaped } of masks) {
+      const escapedOnly = /["\\\u0000-\u001f]/.test(secret);
+      if (!escapedOnly && text.startsWith(secret, index) && (!match || secret.length > match.length)) {
+        match = { length: secret.length, replacement: mask };
+      }
+      if (escaped !== secret && text.startsWith(escaped, index) && (!match || escaped.length > match.length)) {
+        match = { length: escaped.length, replacement: JSON.stringify(mask).slice(1, -1) };
+      }
+    }
+    if (match) {
+      result += match.replacement;
+      index += match.length;
+    } else {
+      result += text[index];
+      index += 1;
+    }
   }
-  return result.replace(/__GRILL_MASK_(\d+)__/g, (_match, index: string) => protectedMasks[Number(index)]);
+  return result;
 }
 
 export function validateBaseUrl(url: string, hasCredentials: boolean): { valid: boolean; error?: string } {
