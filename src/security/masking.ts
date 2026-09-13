@@ -14,7 +14,7 @@ export function maskSecret(secret?: string): string {
   return `${prefix}••••••••${suffix}`;
 }
 
-export function validateBaseUrl(url: string): { valid: boolean; error?: string } {
+export function validateBaseUrl(url: string, hasCredentials: boolean): { valid: boolean; error?: string } {
   if (!url || typeof url !== 'string') {
     return { valid: false, error: 'URLを入力してください' };
   }
@@ -29,6 +29,13 @@ export function validateBaseUrl(url: string): { valid: boolean; error?: string }
     const parsed = new URL(trimmed);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return { valid: false, error: 'プロトコルは http:// または https:// のみ許可されています' };
+    }
+    if (hasCredentials && parsed.protocol === 'http:') {
+      const hostname = parsed.hostname.toLowerCase();
+      const isLoopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+      if (!isLoopback) {
+        return { valid: false, error: '認証情報を含む接続先は HTTPS または loopback の HTTP のみ許可されています' };
+      }
     }
     return { valid: true };
   } catch {
