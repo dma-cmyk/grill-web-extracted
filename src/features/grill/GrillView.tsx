@@ -42,9 +42,14 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
   const [rawModalOpen, setRawModalOpen] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // Concurrency & Abort management
+  // Concurrency, abort, and retry request management
   const activeRequestIdRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastRequestRef = useRef<{
+    requestSession: SessionRecord;
+    baseSession: SessionRecord;
+    isRepairAttempt: boolean;
+  } | null>(null);
 
   // Load session from storage
   const loadSession = async () => {
@@ -144,6 +149,11 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       // Step: receiving
       await updateSession((curr) => ({ ...curr, status: 'receiving' }));
 
+      lastRequestRef.current = {
+        requestSession: updatedSession,
+        baseSession: updatedSession,
+        isRepairAttempt: false,
+      };
       const fullOutput = await executeLlmCall(updatedSession, reqId, (_chunk, accumulated) => {
         setStreamingText(accumulated);
       });
@@ -288,6 +298,11 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     setStreamingText('修復リクエストを実行中...');
 
     try {
+      lastRequestRef.current = {
+        requestSession: sessionWithRepair,
+        baseSession: sessionWithRepair,
+        isRepairAttempt: true,
+      };
       const repairedOutput = await executeLlmCall(sessionWithRepair, reqId, (_chunk, accumulated) => {
         setStreamingText(accumulated);
       });
@@ -376,6 +391,11 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     try {
       await updateSession((curr) => ({ ...curr, status: 'receiving' }));
 
+      lastRequestRef.current = {
+        requestSession: sessionAfterAnswer,
+        baseSession: sessionAfterAnswer,
+        isRepairAttempt: false,
+      };
       const fullOutput = await executeLlmCall(sessionAfterAnswer, reqId, (_chunk, accumulated) => {
         setStreamingText(accumulated);
       });
@@ -427,14 +447,43 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
   };
 
   /**
+   * Resends the exact request captured immediately before its original send.
+   */
+  const resendLastRequest = async () => {
+    const snapshot = lastRequestRef.current;
+    if (!snapshot) return;
+
+    const reqId = 'req-' + Date.now();
+    activeRequestIdRef.current = reqId;
+    setStreamingText('');
+
+    try {
+      await updateSession((curr) => ({ ...curr, status: 'requesting' }));
+      await updateSession((curr) => ({ ...curr, status: 'receiving' }));
+
+      const fullOutput = await executeLlmCall(snapshot.requestSession, reqId, (_chunk, accumulated) => {
+        setStreamingText(accumulated);
+      });
+
+      if (activeRequestIdRef.current !== reqId) return;
+
+      await updateSession((curr) => ({ ...curr, status: 'parsing', lastRawResponse: fullOutput }));
+      await handleReceivedResponse(fullOutput, snapshot.baseSession, reqId, snapshot.isRepairAttempt);
+    } catch (err: unknown) {
+      if (activeRequestIdRef.current !== reqId) return;
+      handleLlmError(err);
+    }
+  };
+
+  /**
    * User retries the last action from recoverable error or aborted state
    */
   const handleRetry = () => {
     if (!session) return;
     if (session.rounds.length === 0) {
       startInitialRound(session);
-    } else {
-      handleSubmitAnswers();
+    } else if (lastRequestRef.current) {
+      resendLastRequest();
     }
   };
 
@@ -529,7 +578,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       </div>
 
       {/* Recoverable Error Callout */}
-      {session.status === 'recoverable_error' && (
+      {(session.status === 'recoverable_error' || session.status === 'aborted') && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-5 space-y-3">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
