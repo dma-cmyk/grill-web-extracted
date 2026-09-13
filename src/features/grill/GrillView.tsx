@@ -41,6 +41,9 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
   const [historyOpen, setHistoryOpen] = useState(false);
   const [rawModalOpen, setRawModalOpen] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const sessionRef = useRef<SessionRecord | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // Concurrency, abort, and retry request management
   const activeRequestIdRef = useRef<string | null>(null);
@@ -60,12 +63,13 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       onNavigate({ route: 'sessions' });
       return;
     }
+    sessionRef.current = s;
     setSession(s);
     setLoading(false);
 
     // If session is newly created in 'draft' state, automatically kick off Round 1
     if (s.status === 'draft') {
-      startInitialRound(s);
+      await startInitialRound(s);
     }
   };
 
@@ -81,12 +85,21 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
 
   // Update session state in memory and persist in IndexedDB
   const updateSession = async (updater: (prev: SessionRecord) => SessionRecord) => {
-    setSession((prev) => {
-      if (!prev) return prev;
-      const next = updater(prev);
-      sessionRepo.save(next);
-      return next;
+    const prev = sessionRef.current;
+    if (!prev) return;
+    const next = updater(prev);
+    sessionRef.current = next;
+    setSession(next);
+    const save = saveQueueRef.current.then(async () => {
+      try {
+        await sessionRepo.save(next);
+        setSaveError(null);
+      } catch {
+        setSaveError('セッションの保存に失敗しました。操作は画面上に保持されています。');
+      }
     });
+    saveQueueRef.current = save;
+    await save;
   };
 
   /**
@@ -98,6 +111,9 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     onProgress: (chunk: string, accumulated: string) => void
   ): Promise<string> => {
     const profile = await apiProfileRepo.getById(s.selectionSnapshot.apiProfileId);
+    if (activeRequestIdRef.current !== requestId) {
+      throw new DOMException('Aborted by user', 'AbortError');
+    }
     if (!profile) {
       throw new Error(`API Profile (${s.selectionSnapshot.apiProfileName}) が見つかりません`);
     }
@@ -142,12 +158,14 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       currentRound: 1,
     };
     await updateSession(() => updatedSession);
+    if (activeRequestIdRef.current !== reqId) return;
 
     setStreamingText('');
 
     try {
       // Step: receiving
       await updateSession((curr) => ({ ...curr, status: 'receiving' }));
+      if (activeRequestIdRef.current !== reqId) return;
 
       lastRequestRef.current = {
         requestSession: updatedSession,
@@ -162,11 +180,12 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
 
       // Step: parsing
       await updateSession((curr) => ({ ...curr, status: 'parsing', lastRawResponse: fullOutput }));
+      if (activeRequestIdRef.current !== reqId) return;
 
       await handleReceivedResponse(fullOutput, updatedSession, reqId, false);
     } catch (err: any) {
       if (activeRequestIdRef.current !== reqId) return;
-      handleLlmError(err);
+      await handleLlmError(err);
     }
   };
 
@@ -234,6 +253,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       }
 
       await updateSession(() => nextSession);
+      if (activeRequestIdRef.current !== reqId) return;
       setStreamingText('');
 
       // Initialize answers for the new round's questions
@@ -295,6 +315,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       status: 'receiving' as GrillStatus,
     };
     await updateSession(() => sessionWithRepair);
+    if (activeRequestIdRef.current !== reqId) return;
     setStreamingText('修復リクエストを実行中...');
 
     try {
@@ -312,7 +333,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       await handleReceivedResponse(repairedOutput, sessionWithRepair, reqId, true);
     } catch (err: any) {
       if (activeRequestIdRef.current !== reqId) return;
-      handleLlmError(err);
+      await handleLlmError(err);
     }
   };
 
@@ -386,10 +407,12 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     };
 
     await updateSession(() => sessionAfterAnswer);
+    if (activeRequestIdRef.current !== reqId) return;
     setStreamingText('');
 
     try {
       await updateSession((curr) => ({ ...curr, status: 'receiving' }));
+      if (activeRequestIdRef.current !== reqId) return;
 
       lastRequestRef.current = {
         requestSession: sessionAfterAnswer,
@@ -403,11 +426,12 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       if (activeRequestIdRef.current !== reqId) return;
 
       await updateSession((curr) => ({ ...curr, status: 'parsing', lastRawResponse: fullOutput }));
+      if (activeRequestIdRef.current !== reqId) return;
 
       await handleReceivedResponse(fullOutput, sessionAfterAnswer, reqId, false);
     } catch (err: any) {
       if (activeRequestIdRef.current !== reqId) return;
-      handleLlmError(err);
+      await handleLlmError(err);
     }
   };
 
@@ -434,12 +458,12 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
   /**
    * User aborts current communication
    */
-  const handleAbort = () => {
+  const handleAbort = async () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     activeRequestIdRef.current = null;
-    updateSession((curr) => ({
+    await updateSession((curr) => ({
       ...curr,
       status: 'aborted',
       lastError: 'リクエストを中断しました',
@@ -459,7 +483,9 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
 
     try {
       await updateSession((curr) => ({ ...curr, status: 'requesting' }));
+      if (activeRequestIdRef.current !== reqId) return;
       await updateSession((curr) => ({ ...curr, status: 'receiving' }));
+      if (activeRequestIdRef.current !== reqId) return;
 
       const fullOutput = await executeLlmCall(snapshot.requestSession, reqId, (_chunk, accumulated) => {
         setStreamingText(accumulated);
@@ -468,22 +494,23 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       if (activeRequestIdRef.current !== reqId) return;
 
       await updateSession((curr) => ({ ...curr, status: 'parsing', lastRawResponse: fullOutput }));
+      if (activeRequestIdRef.current !== reqId) return;
       await handleReceivedResponse(fullOutput, snapshot.baseSession, reqId, snapshot.isRepairAttempt);
     } catch (err: unknown) {
       if (activeRequestIdRef.current !== reqId) return;
-      handleLlmError(err);
+      await handleLlmError(err);
     }
   };
 
   /**
    * User retries the last action from recoverable error or aborted state
    */
-  const handleRetry = () => {
+  const handleRetry = async () => {
     if (!session) return;
     if (session.rounds.length === 0) {
-      startInitialRound(session);
+      await startInitialRound(session);
     } else if (lastRequestRef.current) {
-      resendLastRequest();
+      await resendLastRequest();
     }
   };
 
@@ -576,6 +603,11 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
           )}
         </div>
       </div>
+      {saveError && (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-sm text-amber-900" role="alert">
+          セッションの保存に失敗しました。操作は画面上に保持されています。
+        </div>
+      )}
 
       {/* Recoverable Error Callout */}
       {(session.status === 'recoverable_error' || session.status === 'aborted') && (
@@ -607,7 +639,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
               </button>
             )}
             <button
-              onClick={() => updateSession((curr) => ({ ...curr, status: 'awaiting_answer' }))}
+              onClick={async () => { await updateSession((curr) => ({ ...curr, status: 'awaiting_answer' })); }}
               className="px-3 py-2 text-slate-600 hover:text-slate-900 text-xs font-medium cursor-pointer"
             >
               手動で回答へ進む
