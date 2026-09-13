@@ -311,7 +311,7 @@ export class OpenAICompatibleProvider implements ILlmProvider {
           });
         }
 
-        const preview = sanitizeErrorDetails(text.slice(0, 200), secrets);
+        const preview = sanitizeErrorDetails(text, secrets).slice(0, 200);
         const parseError: ProviderError = {
           code: 'PARSE_ERROR',
           message: `API応答の形式を判別できませんでした。本文: ${preview}`,
