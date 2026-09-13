@@ -60,7 +60,8 @@ export const ApiProfilesView: React.FC = () => {
   };
 
   const openEditModal = (p: ApiProfile) => {
-    setEditingProfile({ ...p });
+    const memoryHeaders = inMemoryKeyStore.getHeaders(p.id);
+    setEditingProfile({ ...p, headers: memoryHeaders || p.headers });
     // Retrieve key from profile (if remembered) or memory store
     const key = p.apiKey || inMemoryKeyStore.get(p.id) || '';
     setTempApiKey(key);
@@ -144,23 +145,24 @@ export const ApiProfilesView: React.FC = () => {
 
     const id = editingProfile.id || 'profile-' + Math.random().toString(36).substring(2, 9);
     const isRemember = !!editingProfile.rememberKey;
-
     const fullProfile: ApiProfile = {
       id,
       name: editingProfile.name.trim(),
       baseUrl: editingProfile.baseUrl.trim(),
-      apiKey: isRemember ? tempApiKey.trim() : undefined,
+      apiKey: tempApiKey.trim(),
       headers: editingProfile.headers || [],
       rememberKey: isRemember,
       createdAt: editingProfile.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
 
-    // Store in memory if not remembered
-    if (!isRemember && tempApiKey) {
+    // Keep all credentials in memory while persistence is disabled.
+    if (!isRemember) {
       inMemoryKeyStore.set(id, tempApiKey.trim());
-    } else if (isRemember) {
-      inMemoryKeyStore.set(id, tempApiKey.trim());
+      inMemoryKeyStore.setHeaders(id, editingProfile.headers || []);
+    } else {
+      inMemoryKeyStore.set(id, '');
+      inMemoryKeyStore.setHeaders(id, []);
     }
 
     await apiProfileRepo.save(fullProfile);
@@ -462,14 +464,14 @@ export const ApiProfilesView: React.FC = () => {
                     className="w-4 h-4 rounded text-orange-600 border-slate-300 focus:ring-orange-500"
                   />
                   <span className="text-xs font-semibold text-slate-800">
-                    APIキーをこのブラウザ（IndexedDB）に保存する
+                    APIキーとカスタムヘッダーの値をこのブラウザ（IndexedDB）に保存する
                   </span>
                 </label>
                 {editingProfile.rememberKey && (
                   <div className="text-[11px] text-amber-800 bg-amber-100/70 border border-amber-300/60 rounded-lg p-2.5 flex items-start gap-2">
                     <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                     <span>
-                      <strong>警告:</strong> APIキーがブラウザのローカルストレージに保存されます。共有PC・端末ではOFFにし、タブメモリのみでの利用をおすすめします。
+                      <strong>警告:</strong> APIキーとカスタムヘッダーの値がIndexedDBに保存されます。OFFの場合はどちらも保存されず、このタブのメモリ内だけで保持されます。
                     </span>
                   </div>
                 )}

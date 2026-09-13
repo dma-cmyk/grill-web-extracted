@@ -1,32 +1,52 @@
 import { db } from './db';
 import { ApiProfile, ModelCacheItem } from '../types/apiProfile';
+import { inMemoryKeyStore } from '../security/inMemoryKeyStore';
+
+const withMemoryCredentials = (profile: ApiProfile): ApiProfile => {
+  if (profile.rememberKey) return profile;
+  const apiKey = inMemoryKeyStore.get(profile.id);
+  const headers = inMemoryKeyStore.getHeaders(profile.id);
+  return {
+    ...profile,
+    apiKey: apiKey || profile.apiKey,
+    headers: headers || profile.headers,
+  };
+};
 
 export const apiProfileRepo = {
   async getAll(): Promise<ApiProfile[]> {
-    return db.apiProfiles.toArray();
+    const profiles = await db.apiProfiles.toArray();
+    return profiles.map(withMemoryCredentials);
   },
 
   async getById(id: string): Promise<ApiProfile | undefined> {
-    return db.apiProfiles.get(id);
+    const profile = await db.apiProfiles.get(id);
+    return profile ? withMemoryCredentials(profile) : undefined;
   },
 
   async save(profile: ApiProfile): Promise<void> {
+    if (!profile.rememberKey) {
+      inMemoryKeyStore.set(profile.id, profile.apiKey || '');
+      inMemoryKeyStore.setHeaders(profile.id, profile.headers || []);
+    }
     const toSave: ApiProfile = {
       ...profile,
-      // If rememberKey is false, never persist apiKey to IndexedDB
       apiKey: profile.rememberKey ? profile.apiKey : undefined,
+      headers: profile.rememberKey
+        ? profile.headers
+        : (profile.headers || []).map(({ key }) => ({ key, value: '' })),
       updatedAt: Date.now(),
     };
     await db.apiProfiles.put(toSave);
   },
 
   async delete(id: string): Promise<void> {
-    // Delete profile and associated model cache only; keep sessions intact
     await db.transaction('rw', db.apiProfiles, db.modelCache, async () => {
       await db.apiProfiles.delete(id);
       await db.modelCache.where('apiProfileId').equals(id).delete();
     });
   },
+
 
   async getCachedModels(apiProfileId: string): Promise<ModelCacheItem[]> {
     return db.modelCache.where('apiProfileId').equals(apiProfileId).toArray();

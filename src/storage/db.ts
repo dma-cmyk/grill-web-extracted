@@ -26,6 +26,20 @@ export class GrillDatabase extends Dexie {
       sessions: 'id, title, status, currentRound, progress, createdAt, updatedAt',
       settings: 'key',
     });
+    this.version(2).stores({
+      apiProfiles: 'id, name, baseUrl, rememberKey, createdAt, updatedAt',
+      modelCache: 'id, apiProfileId, modelId, fetchedAt',
+      promptProfiles: 'id, name, builtIn, createdAt, updatedAt',
+      sessions: 'id, title, status, currentRound, progress, createdAt, updatedAt',
+      settings: 'key',
+    }).upgrade(async (tx) => {
+      await tx.table('apiProfiles').toCollection().modify((profile: ApiProfile) => {
+        if (!profile.rememberKey) {
+          delete profile.apiKey;
+          profile.headers = (profile.headers || []).map(({ key }) => ({ key, value: '' }));
+        }
+      });
+    });
   }
 }
 
