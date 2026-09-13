@@ -72,14 +72,16 @@ export const ApiProfilesView: React.FC = () => {
   const handleBaseUrlChange = (val: string) => {
     if (editingProfile) {
       setEditingProfile({ ...editingProfile, baseUrl: val });
-      const check = validateBaseUrl(val);
+      const hasCredentials = !!tempApiKey.trim() || (editingProfile.headers || []).some((header) => !!header.value.trim());
+      const check = validateBaseUrl(val, hasCredentials);
       setUrlError(check.valid ? null : check.error || '無効なURL形式です');
     }
   };
 
   const handleTestConnection = async () => {
     if (!editingProfile?.baseUrl) return;
-    const check = validateBaseUrl(editingProfile.baseUrl);
+    const hasCredentials = !!tempApiKey.trim() || (editingProfile.headers || []).some((header) => !!header.value.trim());
+    const check = validateBaseUrl(editingProfile.baseUrl, hasCredentials);
     if (!check.valid) {
       setUrlError(check.error || '無効なURLです');
       return;
@@ -137,12 +139,12 @@ export const ApiProfilesView: React.FC = () => {
     e.preventDefault();
     if (!editingProfile?.name || !editingProfile?.baseUrl) return;
 
-    const check = validateBaseUrl(editingProfile.baseUrl);
+    const hasCredentials = !!tempApiKey.trim() || (editingProfile.headers || []).some((header) => !!header.value.trim());
+    const check = validateBaseUrl(editingProfile.baseUrl, hasCredentials);
     if (!check.valid) {
       setUrlError(check.error || '無効なURLです');
       return;
     }
-
     const id = editingProfile.id || 'profile-' + Math.random().toString(36).substring(2, 9);
     const isRemember = !!editingProfile.rememberKey;
     const fullProfile: ApiProfile = {

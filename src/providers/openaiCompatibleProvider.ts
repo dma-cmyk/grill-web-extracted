@@ -138,7 +138,8 @@ export class OpenAICompatibleProvider implements ILlmProvider {
     profile: ApiProfile,
     apiKey?: string
   ): Promise<{ success: boolean; latencyMs?: number; error?: ProviderError }> {
-    const urlValidation = validateBaseUrl(profile.baseUrl);
+    const hasCredentials = !!apiKey?.trim() || !!profile.apiKey?.trim() || (profile.headers || []).some((header) => !!header.value.trim());
+    const urlValidation = validateBaseUrl(profile.baseUrl, hasCredentials);
     if (!urlValidation.valid) {
       return {
         success: false,
@@ -194,10 +195,19 @@ export class OpenAICompatibleProvider implements ILlmProvider {
   }
 
   async listModels(profile: ApiProfile, apiKey?: string): Promise<ModelInfo[]> {
+    const hasCredentials = !!apiKey?.trim() || !!profile.apiKey?.trim() || (profile.headers || []).some((header) => !!header.value.trim());
+    const urlValidation = validateBaseUrl(profile.baseUrl, hasCredentials);
+    if (!urlValidation.valid) {
+      const error: ProviderError = {
+        code: 'INVALID_URL',
+        message: urlValidation.error || '無効なURLです',
+        isRetryable: false,
+      };
+      throw error;
+    }
     const cleanUrl = this.normalizeUrl(profile.baseUrl);
     const modelsEndpoint = `${cleanUrl}/models`;
-    const secrets = [apiKey || '', profile.apiKey || ''];
-
+    const secrets = [apiKey?.trim() || '', profile.apiKey?.trim() || '', ...(profile.headers?.map((header) => header.value.trim()) || [])];
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
@@ -236,6 +246,16 @@ export class OpenAICompatibleProvider implements ILlmProvider {
 
   async chat(params: StreamChatParams): Promise<string> {
     const { profile, apiKey, model, messages, signal, onChunk } = params;
+    const hasCredentials = !!apiKey?.trim() || !!profile.apiKey?.trim() || (profile.headers || []).some((header) => !!header.value.trim());
+    const urlValidation = validateBaseUrl(profile.baseUrl, hasCredentials);
+    if (!urlValidation.valid) {
+      const error: ProviderError = {
+        code: 'INVALID_URL',
+        message: urlValidation.error || '無効なURLです',
+        isRetryable: false,
+      };
+      throw error;
+    }
     const cleanUrl = this.normalizeUrl(profile.baseUrl);
     const completionsEndpoint = `${cleanUrl}/chat/completions`;
     const secrets = [
