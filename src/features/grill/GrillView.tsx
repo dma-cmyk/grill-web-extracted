@@ -111,6 +111,9 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     onProgress: (chunk: string, accumulated: string) => void
   ): Promise<string> => {
     const profile = await apiProfileRepo.getById(s.selectionSnapshot.apiProfileId);
+    if (activeRequestIdRef.current !== requestId) {
+      throw new DOMException('Aborted by user', 'AbortError');
+    }
     if (!profile) {
       throw new Error(`API Profile (${s.selectionSnapshot.apiProfileName}) が見つかりません`);
     }
