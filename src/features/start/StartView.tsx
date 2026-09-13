@@ -7,7 +7,7 @@ import { apiProfileRepo } from '../../storage/apiProfileRepo';
 import { promptProfileRepo } from '../../storage/promptProfileRepo';
 import { sessionRepo } from '../../storage/sessionRepo';
 import { inMemoryKeyStore } from '../../security/inMemoryKeyStore';
-import { maskSecrets } from '../../security/masking';
+import { maskPlainSecrets } from '../../security/masking';
 import { MOCK_API_PROFILE } from '../../providers/mockProvider';
 import { Flame, Play, Sparkles, Sliders, ShieldCheck, Key, ArrowRight, HelpCircle } from 'lucide-react';
 
@@ -132,7 +132,7 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
 
     const sessionId = 'session-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 7);
     const profileSecrets = [selectedProfile.apiKey, inMemoryKeyStore.get(selectedProfile.id), ...(selectedProfile.headers || []).map((header) => header.value), ...(inMemoryKeyStore.getHeaders(selectedProfile.id) || []).map((header) => header.value)];
-    const maskedModel = maskSecrets(effectiveModel, profileSecrets);
+    const maskedModel = maskPlainSecrets(effectiveModel, profileSecrets);
     const snapshot: SelectionSnapshot = {
       apiProfileId: selectedProfile.id,
       apiProfileName: selectedProfile.name,

@@ -1,7 +1,7 @@
 import { db } from './db';
 import { ApiProfile, ModelCacheItem } from '../types/apiProfile';
 import { inMemoryKeyStore } from '../security/inMemoryKeyStore';
-import { maskSecrets } from '../security/masking';
+import { maskPlainSecrets, maskSecrets } from '../security/masking';
 
 const withMemoryCredentials = (profile: ApiProfile): ApiProfile => {
   if (profile.rememberKey) return profile;
@@ -55,9 +55,9 @@ export const apiProfileRepo = {
     const secrets = profile ? [profile.apiKey, ...(profile.headers || []).map((header) => header.value)] : [];
     return models.map((model) => ({
       ...model,
-      id: maskSecrets(model.id, secrets),
-      modelId: maskSecrets(model.modelId, secrets),
-      displayName: maskSecrets(model.displayName, secrets),
+      id: maskPlainSecrets(model.id, secrets),
+      modelId: maskPlainSecrets(model.modelId, secrets),
+      displayName: maskPlainSecrets(model.displayName, secrets),
     }));
   },
 
@@ -68,10 +68,10 @@ export const apiProfileRepo = {
     await db.transaction('rw', db.modelCache, async () => {
       await db.modelCache.where('apiProfileId').equals(apiProfileId).delete();
       const items: ModelCacheItem[] = models.map((m) => ({
-        id: `${apiProfileId}:${maskSecrets(m.id, secrets)}`,
+        id: `${apiProfileId}:${maskPlainSecrets(m.id, secrets)}`,
         apiProfileId,
-        modelId: maskSecrets(m.id, secrets),
-        displayName: maskSecrets(m.name || m.id, secrets),
+        modelId: maskPlainSecrets(m.id, secrets),
+        displayName: maskPlainSecrets(m.name || m.id, secrets),
         fetchedAt: now,
       }));
       await db.modelCache.bulkPut(items);

@@ -14,7 +14,25 @@ export function maskSecret(secret?: string): string {
   return `${prefix}••••••••${suffix}`;
 }
 
-/** Replace literal and JSON-escaped secret occurrences in one pass. */
+/** Replace secrets in already-parsed plain values without JSON wire escaping rules. */
+export function maskPlainSecrets(text: string, secrets: Array<string | undefined> = []): string {
+  if (!text || secrets.length === 0) return text;
+  const unique = Array.from(new Set(secrets.map((secret) => secret?.trim()).filter((secret): secret is string => !!secret)))
+    .sort((a, b) => b.length - a.length);
+  const masks = unique.map((secret) => ({ secret, mask: maskSecret(secret) }));
+  let result = '';
+  let index = 0;
+  while (index < text.length) {
+    const existing = masks.find(({ mask }) => text.startsWith(mask, index));
+    if (existing) { result += existing.mask; index += existing.mask.length; continue; }
+    const match = masks.find(({ secret }) => text.startsWith(secret, index));
+    if (match) { result += match.mask; index += match.secret.length; continue; }
+    result += text[index++];
+  }
+  return result;
+}
+
+/** Replace secrets in JSON/SSE wire text, preserving structural syntax. */
 export function maskSecrets(text: string, secrets: Array<string | undefined> = []): string {
   if (!text || secrets.length === 0) return text;
   const unique = Array.from(new Set(secrets.map((secret) => secret?.trim()).filter((secret): secret is string => !!secret)))
@@ -24,28 +42,13 @@ export function maskSecrets(text: string, secrets: Array<string | undefined> = [
   let index = 0;
   while (index < text.length) {
     const existing = masks.find(({ mask }) => text.startsWith(mask, index));
-    if (existing) {
-      result += existing.mask;
-      index += existing.mask.length;
-      continue;
-    }
+    if (existing) { result += existing.mask; index += existing.mask.length; continue; }
     let match: { length: number; replacement: string } | undefined;
     for (const { secret, mask, escaped } of masks) {
-      const escapedOnly = /["\\\u0000-\u001f]/.test(secret);
-      if (!escapedOnly && text.startsWith(secret, index) && (!match || secret.length > match.length)) {
-        match = { length: secret.length, replacement: mask };
-      }
-      if (escaped !== secret && text.startsWith(escaped, index) && (!match || escaped.length > match.length)) {
-        match = { length: escaped.length, replacement: JSON.stringify(mask).slice(1, -1) };
-      }
+      if (!/["\\\u0000-\u001f]/.test(secret) && text.startsWith(secret, index) && (!match || secret.length > match.length)) match = { length: secret.length, replacement: mask };
+      if (escaped !== secret && text.startsWith(escaped, index) && (!match || escaped.length > match.length)) match = { length: escaped.length, replacement: JSON.stringify(mask).slice(1, -1) };
     }
-    if (match) {
-      result += match.replacement;
-      index += match.length;
-    } else {
-      result += text[index];
-      index += 1;
-    }
+    if (match) { result += match.replacement; index += match.length; } else result += text[index++];
   }
   return result;
 }
@@ -85,21 +88,13 @@ export function sanitizeHeaders(headers?: Array<{ key: string; value: string }>)
 
   for (const h of headers) {
     const k = h.key.trim();
-    if (k && h.value) {
-      result[k] = h.value.trim();
-    }
+    if (k && h.value) result[k] = h.value.trim();
   }
   return result;
 }
 
 export function sanitizeErrorDetails(message: string, secrets: string[] = []): string {
-  let cleaned = message;
-  for (const sec of secrets) {
-    if (sec && sec.length > 4) {
-      cleaned = cleaned.replaceAll(sec, maskSecret(sec));
-    }
-  }
-  // Generic pattern for Bearer tokens or sk- keys
+  let cleaned = maskPlainSecrets(message, secrets);
   cleaned = cleaned.replace(/Bearer\s+[A-Za-z0-9_\-\.]+/gi, 'Bearer ••••••••');
   cleaned = cleaned.replace(/sk-[A-Za-z0-9_\-\.]{10,}/gi, 'sk-••••••••');
   return cleaned;
