@@ -1,7 +1,7 @@
 import { ILlmProvider, ModelInfo, ProviderError, ProviderErrorCode, StreamChatParams } from '../types/provider';
 import { ApiProfile } from '../types/apiProfile';
 import { sanitizeErrorDetails, sanitizeHeaders, validateBaseUrl } from '../security/masking';
-import { processSseStream } from './sseStream';
+import { processSseStream, processSseText } from './sseStream';
 
 export class OpenAICompatibleProvider implements ILlmProvider {
   /**
@@ -109,6 +109,30 @@ export class OpenAICompatibleProvider implements ILlmProvider {
       isRetryable: true,
     };
   }
+  private extractContent(json: unknown): string {
+    if (!json || typeof json !== 'object' || !('choices' in json)) {
+      return '';
+    }
+
+    const choices: unknown[] = Array.isArray(json.choices) ? json.choices : [];
+    const firstChoice = choices[0];
+    if (!firstChoice || typeof firstChoice !== 'object') {
+      return '';
+    }
+
+    const message = 'message' in firstChoice ? firstChoice.message : undefined;
+    const messageContent =
+      message &&
+      typeof message === 'object' &&
+      'content' in message &&
+      typeof message.content === 'string'
+        ? message.content
+        : '';
+    const textContent = 'text' in firstChoice && typeof firstChoice.text === 'string' ? firstChoice.text : '';
+
+    return messageContent || textContent || '';
+  }
+
 
   async testConnection(
     profile: ApiProfile,
@@ -214,7 +238,11 @@ export class OpenAICompatibleProvider implements ILlmProvider {
     const { profile, apiKey, model, messages, signal, onChunk } = params;
     const cleanUrl = this.normalizeUrl(profile.baseUrl);
     const completionsEndpoint = `${cleanUrl}/chat/completions`;
-    const secrets = [apiKey || '', profile.apiKey || ''];
+    const secrets = [
+      apiKey?.trim() || '',
+      profile.apiKey?.trim() || '',
+      ...(profile.headers?.map((header) => header.value.trim()) || []),
+    ];
 
     const formattedMessages = messages.map((m) => ({
       role: m.role,
@@ -248,7 +276,7 @@ export class OpenAICompatibleProvider implements ILlmProvider {
 
       // Check if response is stream or direct JSON
       const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('text/event-stream') || response.body) {
+      if (contentType.toLowerCase().includes('text/event-stream')) {
         try {
           const streamResult = await processSseStream(
             response,
@@ -258,15 +286,42 @@ export class OpenAICompatibleProvider implements ILlmProvider {
             signal
           );
           return streamResult;
-        } catch (streamErr: any) {
-          if (streamErr.name === 'AbortError') throw streamErr;
+        } catch (streamErr: unknown) {
+          if (
+            streamErr &&
+            typeof streamErr === 'object' &&
+            'name' in streamErr &&
+            streamErr.name === 'AbortError'
+          ) {
+            throw streamErr;
+          }
           // If streaming failed early, attempt non-stream parse
         }
       }
 
-      // Non-stream fallback or plain JSON
-      const json = await response.json();
-      const content = json.choices?.[0]?.message?.content || '';
+      const text = await response.text();
+      let json: unknown;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        const hasDataLine = text.split('\n').some((line) => line.trim().startsWith('data:'));
+        if (hasDataLine) {
+          return processSseText(text, (chunk, accumulated) => {
+            if (onChunk) onChunk(chunk, accumulated);
+          });
+        }
+
+        const preview = sanitizeErrorDetails(text.slice(0, 200), secrets);
+        const parseError: ProviderError = {
+          code: 'PARSE_ERROR',
+          message: `API応答の形式を判別できませんでした。本文: ${preview}`,
+          details: preview,
+          isRetryable: true,
+        };
+        throw parseError;
+      }
+
+      const content = this.extractContent(json);
       if (onChunk) onChunk(content, content);
       return content;
     } catch (err: any) {
