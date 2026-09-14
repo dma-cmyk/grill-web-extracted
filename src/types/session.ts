@@ -21,9 +21,19 @@ export interface SelectionSnapshot {
   depth: 'quick' | 'standard' | 'deep';
 }
 
+export interface ChatAttachmentPayload {
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind: 'image' | 'text';
+  dataUrl?: string;
+  textContent?: string;
+}
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+  attachments?: ChatAttachmentPayload[];
   rawJson?: string;
   timestamp: number;
 }

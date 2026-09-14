@@ -1,5 +1,6 @@
-import { ChatMessage, SelectionSnapshot } from '../types/session';
+import { ChatAttachmentPayload, ChatMessage, SelectionSnapshot } from '../types/session';
 import { QuestionAnswer } from '../types/grillRound';
+import { formatBytes } from './attachmentValidation';
 
 export function getDepthInstruction(depth: SelectionSnapshot['depth']): string {
   switch (depth) {
@@ -19,7 +20,8 @@ export function getDepthInstruction(depth: SelectionSnapshot['depth']): string {
 export function buildInitialMessages(
   theme: string,
   snapshot: SelectionSnapshot,
-  systemPromptTemplate: string
+  systemPromptTemplate: string,
+  attachments?: ChatAttachmentPayload[]
 ): ChatMessage[] {
   const depthInstruction = getDepthInstruction(snapshot.depth);
   const now = Date.now();
@@ -29,8 +31,20 @@ export function buildInitialMessages(
 ${depthInstruction}
 ユーザーから提示された以下のテーマを精査し、Round 1 の質問と現状分析をJSON形式で返してください。`;
 
+  const attachmentDescription = attachments?.length
+    ? `\n\n【添付ファイル】\n${attachments
+        .map((attachment) => `- ${attachment.name} (${attachment.mimeType}, ${formatBytes(attachment.sizeBytes)})`)
+        .join('\n')}`
+    : '';
   const userContent = `【検討したいテーマ・構想】
-${theme.trim()}`;
+${theme.trim()}${attachmentDescription}`;
+
+  const userMessage: ChatMessage = {
+    role: 'user',
+    content: userContent,
+    timestamp: now + 1,
+    ...(attachments?.length ? { attachments } : {}),
+  };
 
   return [
     {
@@ -38,11 +52,7 @@ ${theme.trim()}`;
       content: systemContent,
       timestamp: now,
     },
-    {
-      role: 'user',
-      content: userContent,
-      timestamp: now + 1,
-    },
+    userMessage,
   ];
 }
 
