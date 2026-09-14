@@ -18,6 +18,17 @@ npm run dev
 
 ブラウザで `http://localhost:3000` を開きます。
 
+## Vercelデプロイ
+
+このリポジトリにはVercel用のビルド設定を含めています。
+
+1. VercelでこのGitHubリポジトリをImportする。
+2. Production Branchを `main` にする。
+3. 初回デプロイ後は、`main` へのpushで自動的に本番デプロイされる。
+4. Pull RequestにはPreviewデプロイを有効化できる。
+
+Vercel側でGitHubリポジトリを一度だけ連携する必要があります。アプリはブラウザから設定済みのOpenAI互換APIへ接続するため、接続先APIがVercelのドメインからのCORSを許可している必要があります。
+
 ## データと認証情報
 
 - APIプロファイル、プロンプトプロファイル、セッションはブラウザのIndexedDBに保存されます。
