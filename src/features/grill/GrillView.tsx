@@ -159,6 +159,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       messages: initialMessages,
       status: 'requesting',
       currentRound: 1,
+      pendingRepair: undefined,
     };
     await updateSession(() => updatedSession);
     if (activeRequestIdRef.current !== reqId) return;
@@ -237,6 +238,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
         openIssues: nextOpenIssues,
         lastError: undefined,
         lastRawResponse: rawText,
+        pendingRepair: undefined,
         messages: [
           ...currentSession.messages,
           {
@@ -283,6 +285,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
           status: 'recoverable_error',
           lastError: parseResult.error || 'AIレスポンスの構造化スキーマ検証に失敗しました',
           lastRawResponse: rawText,
+          pendingRepair: undefined,
         }));
       }
     }
@@ -316,6 +319,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       ...currentSession,
       messages: repairMessages,
       status: 'receiving' as GrillStatus,
+      pendingRepair: true,
     };
     await updateSession(() => sessionWithRepair);
     if (activeRequestIdRef.current !== reqId) return;
@@ -349,6 +353,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
         ...curr,
         status: 'aborted',
         lastError: 'リクエストが中断されました',
+        pendingRepair: undefined,
       }));
       return;
     }
@@ -358,6 +363,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       ...curr,
       status: 'recoverable_error',
       lastError: message,
+      pendingRepair: undefined,
     }));
   };
 
@@ -407,6 +413,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       messages: newMessages,
       rounds: updatedRounds,
       currentRound: session.currentRound + 1,
+      pendingRepair: undefined,
     };
 
     await updateSession(() => sessionAfterAnswer);
@@ -520,12 +527,11 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       const snapshot = lastRequestRef.current || {
         requestSession: session,
         baseSession: session,
-        isRepairAttempt: false,
+        isRepairAttempt: !!session.pendingRepair,
       };
       await resendLastRequest(snapshot);
     }
   };
-
   const handleCopyHandoff = () => {
     if (!session?.finalHandoff) return;
     navigator.clipboard.writeText(session.finalHandoff);
