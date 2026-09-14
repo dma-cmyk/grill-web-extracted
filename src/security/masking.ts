@@ -114,8 +114,8 @@ export function maskPlainSecrets(text: string, secrets: Array<string | undefined
 
 /** Mask only JSON/SSE string value tokens, preserving keys and wire structure. */
 export function maskSecrets(text: string, secrets: Array<string | undefined> = []): string {
-  if (!text || secrets.length === 0) return text;
   const entries = buildSecretEntries(secrets);
+  if (!text || entries.length === 0) return text;
   let result = '';
   let index = 0;
   while (index < text.length) {
@@ -169,11 +169,10 @@ function maskStructuredStream(text: string, entries: SecretEntry[]): string {
   }
   return result;
 }
-
 /** Preserve structured response syntax when possible, otherwise mask plain text. */
 export function maskStreamingText(text: string, secrets: Array<string | undefined> = []): string {
-  if (!text || secrets.length === 0) return text;
   const entries = buildSecretEntries(secrets);
+  if (!text || entries.length === 0) return text;
   return isStructuredStream(text) ? maskStructuredStream(text, entries) : maskDecodedText(text, entries);
 }
 export function maskStreamingFragment(text: string, secrets: Array<string | undefined> = []): string {
@@ -209,6 +208,8 @@ export function maskStreamingFragment(text: string, secrets: Array<string | unde
 }
 /** Preserve structured response syntax when possible, otherwise mask plain text. */
 export function maskResponseText(text: string, secrets: Array<string | undefined> = []): string {
+  const entries = buildSecretEntries(secrets);
+  if (entries.length === 0) return text;
   const trimmed = text.trim();
   if (!trimmed) return text;
   try { JSON.parse(trimmed); return maskSecrets(text, secrets); }
