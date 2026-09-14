@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { RoutePath } from '../../app/router';
 import { Dialog } from '../../components/Dialog';
 import { SessionRecord, ChatAttachmentPayload, GrillStatus } from '../../types/session';
+import { AttachmentRecord } from '../../types/attachment';
 import { QuestionAnswer, GrillRound } from '../../types/grillRound';
 import { sessionRepo } from '../../storage/sessionRepo';
 import { apiProfileRepo } from '../../storage/apiProfileRepo';
 import { attachmentRepo } from '../../storage/attachmentRepo';
+import { formatBytes } from '../../core/attachmentValidation';
 import { inMemoryKeyStore } from '../../security/inMemoryKeyStore';
 import { getProviderForProfile } from '../../providers';
 import { buildInitialMessages, buildAnswersMessage } from '../../core/promptBuilder';
@@ -50,6 +52,16 @@ function readBlobAsDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+const ATTACHMENT_TEXT_PREVIEW_LIMIT = 2000;
+
+interface AttachmentDisplayItem {
+  record: AttachmentRecord;
+  objectUrl?: string;
+  textPreview?: string;
+  textPreviewTruncated?: boolean;
+  previewError?: string;
+}
+
 export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) => {
   const [session, setSession] = useState<SessionRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,6 +71,9 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
   const [rawModalOpen, setRawModalOpen] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [displayAttachments, setDisplayAttachments] = useState<AttachmentDisplayItem[]>([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(true);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const sessionRef = useRef<SessionRecord | null>(null);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
@@ -71,11 +86,111 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     isRepairAttempt: boolean;
   } | null>(null);
 
+  const attachmentLoadGenerationRef = useRef(0);
+  const attachmentObjectUrlsRef = useRef(new Map<string, string>());
+
+  const revokeAttachmentObjectUrls = () => {
+    for (const objectUrl of attachmentObjectUrlsRef.current.values()) {
+      URL.revokeObjectURL(objectUrl);
+    }
+    attachmentObjectUrlsRef.current.clear();
+  };
+
+  const isCurrentAttachmentLoad = (generation: number) =>
+    attachmentLoadGenerationRef.current === generation;
+
+  const loadAttachmentPreviews = async (targetSessionId: string, generation: number) => {
+    let attachmentRecords: AttachmentRecord[];
+    try {
+      attachmentRecords = await attachmentRepo.listBySession(targetSessionId);
+    } catch {
+      if (!isCurrentAttachmentLoad(generation)) return;
+      setDisplayAttachments([]);
+      setAttachmentsLoading(false);
+      setAttachmentError('添付ファイル一覧の読み込みに失敗しました。セッションの進行は継続します。');
+      return;
+    }
+
+    if (!isCurrentAttachmentLoad(generation)) return;
+    if (attachmentRecords.length === 0) {
+      setDisplayAttachments([]);
+      setAttachmentsLoading(false);
+      return;
+    }
+
+    const displayItems: AttachmentDisplayItem[] = [];
+    let hasPreviewError = false;
+
+    for (const attachment of attachmentRecords) {
+      if (!isCurrentAttachmentLoad(generation)) return;
+
+      if (attachment.kind === 'image') {
+        try {
+          const objectUrl = URL.createObjectURL(attachment.blob);
+          if (!isCurrentAttachmentLoad(generation)) {
+            URL.revokeObjectURL(objectUrl);
+            return;
+          }
+
+          const previousObjectUrl = attachmentObjectUrlsRef.current.get(attachment.id);
+          if (previousObjectUrl) {
+            URL.revokeObjectURL(previousObjectUrl);
+          }
+          attachmentObjectUrlsRef.current.set(attachment.id, objectUrl);
+          displayItems.push({ record: attachment, objectUrl });
+        } catch {
+          if (!isCurrentAttachmentLoad(generation)) return;
+          hasPreviewError = true;
+          displayItems.push({
+            record: attachment,
+            previewError: '画像を表示できませんでした。',
+          });
+        }
+        continue;
+      }
+
+      try {
+        const text = await attachment.blob.text();
+        if (!isCurrentAttachmentLoad(generation)) return;
+        displayItems.push({
+          record: attachment,
+          textPreview: text.slice(0, ATTACHMENT_TEXT_PREVIEW_LIMIT),
+          textPreviewTruncated: text.length > ATTACHMENT_TEXT_PREVIEW_LIMIT,
+        });
+      } catch {
+        if (!isCurrentAttachmentLoad(generation)) return;
+        hasPreviewError = true;
+        displayItems.push({
+          record: attachment,
+          previewError: 'テキストを読み込めませんでした。',
+        });
+      }
+    }
+
+    if (!isCurrentAttachmentLoad(generation)) return;
+    setDisplayAttachments(displayItems);
+    setAttachmentsLoading(false);
+    setAttachmentError(
+      hasPreviewError
+        ? '添付ファイルの表示に失敗したものがあります。セッションの進行は継続します。'
+        : null
+    );
+  };
+
   // Load session from storage
   const loadSession = async () => {
+    const generation = attachmentLoadGenerationRef.current + 1;
+    attachmentLoadGenerationRef.current = generation;
+    revokeAttachmentObjectUrls();
+    setDisplayAttachments([]);
+    setAttachmentsLoading(true);
+    setAttachmentError(null);
     setLoading(true);
+
     const s = await sessionRepo.getById(sessionId);
+    if (!isCurrentAttachmentLoad(generation)) return;
     if (!s) {
+      setAttachmentsLoading(false);
       alert('セッションが見つかりませんでした');
       onNavigate({ route: 'sessions' });
       return;
@@ -83,6 +198,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     sessionRef.current = s;
     setSession(s);
     setLoading(false);
+    void loadAttachmentPreviews(sessionId, generation);
 
     // If session is newly created in 'draft' state, automatically kick off Round 1
     if (s.status === 'draft') {
@@ -93,6 +209,9 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
   useEffect(() => {
     loadSession();
     return () => {
+      attachmentLoadGenerationRef.current += 1;
+      revokeAttachmentObjectUrls();
+
       // Clean up any ongoing request on unmount
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -669,6 +788,67 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
           )}
         </div>
       </div>
+      {(attachmentsLoading || displayAttachments.length > 0) && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-bold text-slate-900">添付ファイル</h2>
+            {attachmentsLoading && <span className="text-xs text-slate-500">読み込み中...</span>}
+          </div>
+
+          {attachmentsLoading ? (
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>添付ファイルを読み込んでいます...</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {displayAttachments.map((attachment) => {
+                const { record } = attachment;
+                return (
+                  <div key={record.id} className="border border-slate-200 rounded-xl p-3 space-y-3 bg-slate-50/50">
+                    {record.kind === 'image' ? (
+                      attachment.objectUrl ? (
+                        <img
+                          src={attachment.objectUrl}
+                          alt={record.name}
+                          className="w-full h-40 object-contain rounded-lg bg-white border border-slate-200"
+                        />
+                      ) : (
+                        <div className="h-40 flex items-center justify-center rounded-lg bg-slate-100 border border-slate-200 text-xs text-slate-500">
+                          画像プレビューを読み込めませんでした
+                        </div>
+                      )
+                    ) : (
+                      <pre className="h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-white border border-slate-200 p-3 text-xs leading-relaxed text-slate-700">
+                        {attachment.textPreview || '(本文なし)'}
+                        {attachment.textPreviewTruncated ? '\n…' : ''}
+                      </pre>
+                    )}
+
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900 truncate" title={record.name}>
+                        {record.name}
+                      </p>
+                      <p className="text-xs text-slate-500">{formatBytes(record.sizeBytes)}</p>
+                    </div>
+
+                    {attachment.previewError && (
+                      <p className="text-xs text-amber-700" role="status">
+                        {attachment.previewError}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+      {attachmentError && (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-sm text-amber-900" role="alert">
+          {attachmentError}
+        </div>
+      )}
       {saveError && (
         <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-sm text-amber-900" role="alert">
           セッションの保存に失敗しました。操作は画面上に保持されています。
