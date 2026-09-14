@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { RoutePath } from '../../app/router';
 import { ApiProfile, ModelCacheItem } from '../../types/apiProfile';
 import { PromptProfile } from '../../types/promptProfile';
 import { SessionRecord, SelectionSnapshot } from '../../types/session';
+import { AttachmentDraft } from '../../types/attachment';
 import { apiProfileRepo } from '../../storage/apiProfileRepo';
 import { promptProfileRepo } from '../../storage/promptProfileRepo';
 import { sessionRepo } from '../../storage/sessionRepo';
+import { attachmentRepo } from '../../storage/attachmentRepo';
 import { inMemoryKeyStore } from '../../security/inMemoryKeyStore';
 import { maskPlainSecrets } from '../../security/masking';
 import { MOCK_API_PROFILE } from '../../providers/mockProvider';
+import { ATTACHMENT_ACCEPT_ATTRIBUTE, describeAttachmentLimits, formatBytes, validateAttachmentFile } from '../../core/attachmentValidation';
 import { Flame, Play, Sparkles, Sliders, ShieldCheck, Key, ArrowRight, HelpCircle } from 'lucide-react';
 
 interface StartViewProps {
@@ -32,6 +35,9 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
   const [promptProfiles, setPromptProfiles] = useState<PromptProfile[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState<string>('');
   const [sessionApiKey, setSessionApiKey] = useState<string>('');
+  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const imageObjectUrls = useRef(new Map<string, string>());
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -84,6 +90,52 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
       setSelectedModelId('gpt-4o');
     }
   };
+
+  const handleAttachmentChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    const files: File[] = [];
+    if (fileList) {
+      for (let index = 0; index < fileList.length; index += 1) {
+        const file = fileList.item(index);
+        if (file) files.push(file);
+      }
+    }
+    e.target.value = '';
+    if (files.length === 0) return;
+    setAttachmentError(null);
+    const next = [...attachments];
+    let totalBytes = next.reduce((sum, attachment) => sum + attachment.sizeBytes, 0);
+    let firstError: string | null = null;
+    for (const file of files) {
+      const result = validateAttachmentFile(file, totalBytes, next.length);
+      if (!result.valid || !result.kind) {
+        if (!firstError) firstError = result.error || '添付ファイルを確認できませんでした。';
+        continue;
+      }
+      const id = `attachment-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      const draft: AttachmentDraft = { id, name: file.name, mimeType: file.type, sizeBytes: file.size, kind: result.kind, file };
+      if (result.kind === 'image') imageObjectUrls.current.set(id, URL.createObjectURL(file));
+      else draft.textPreview = (await file.text()).slice(0, 2000);
+      next.push(draft);
+      totalBytes += file.size;
+    }
+    setAttachments(next);
+    setAttachmentError(firstError);
+  };
+
+  const removeAttachment = (id: string) => {
+    const objectUrl = imageObjectUrls.current.get(id);
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+      imageObjectUrls.current.delete(id);
+    }
+    setAttachments((current) => current.filter((attachment) => attachment.id !== id));
+  };
+
+  useEffect(() => () => {
+    imageObjectUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    imageObjectUrls.current.clear();
+  }, []);
 
   const selectedProfile = apiProfiles.find((p) => p.id === selectedProfileId);
   const needsSessionKey =
@@ -166,7 +218,14 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
       updatedAt: Date.now(),
     };
 
-    await sessionRepo.save(newSession);
+    try {
+      await sessionRepo.save(newSession);
+      await attachmentRepo.saveMany(sessionId, attachments);
+    } catch {
+      setFormError('セッションまたは添付ファイルの保存に失敗しました。');
+      setSubmitting(false);
+      return;
+    }
 
     // Navigate to grill screen
     onNavigate({ route: 'grill', sessionId });
@@ -235,6 +294,30 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
               ))}
             </div>
           </div>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+          <label htmlFor="attachment-input" className="text-sm font-bold text-slate-900">添付ファイル（任意）</label>
+          <input id="attachment-input" type="file" multiple accept={ATTACHMENT_ACCEPT_ATTRIBUTE} onChange={handleAttachmentChange} className="w-full text-sm text-slate-700" />
+          <p className="text-xs text-slate-500">{describeAttachmentLimits()}</p>
+          {attachmentError && <p className="text-sm text-red-600">{attachmentError}</p>}
+          {attachments.length > 0 && (
+            <ul className="space-y-3">
+              {attachments.map((attachment) => (
+                <li key={attachment.id} className="flex items-start gap-3 border border-slate-200 rounded-xl p-3">
+                  {attachment.kind === 'image' ? (
+                    <img src={imageObjectUrls.current.get(attachment.id)} alt={attachment.name} className="w-16 h-16 object-cover rounded-lg border border-slate-200" />
+                  ) : (
+                    <pre className="w-32 h-16 overflow-hidden bg-slate-50 rounded-lg p-2 text-[10px] text-slate-600 whitespace-pre-wrap">{attachment.textPreview}</pre>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-900 truncate">{attachment.name}</p>
+                    <p className="text-xs text-slate-500">{formatBytes(attachment.sizeBytes)}</p>
+                  </div>
+                  <button type="button" onClick={() => removeAttachment(attachment.id)} className="text-xs text-red-600 hover:underline">削除</button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* Configuration grid */}
