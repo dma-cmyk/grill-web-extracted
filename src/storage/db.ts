@@ -2,7 +2,7 @@ import Dexie, { Table } from 'dexie';
 import { ApiProfile, ModelCacheItem } from '../types/apiProfile';
 import { PromptProfile } from '../types/promptProfile';
 import { SessionRecord } from '../types/session';
-
+import { AttachmentRecord } from '../types/attachment';
 export interface AppSetting {
   key: string;
   value: any;
@@ -14,6 +14,7 @@ export class GrillDatabase extends Dexie {
   promptProfiles!: Table<PromptProfile, string>;
   sessions!: Table<SessionRecord, string>;
   settings!: Table<AppSetting, string>;
+  attachments!: Table<AttachmentRecord, string>;
 
   constructor() {
     super('GrillWebDB');
@@ -39,6 +40,14 @@ export class GrillDatabase extends Dexie {
           profile.headers = (profile.headers || []).map(({ key }) => ({ key, value: '' }));
         }
       });
+    });
+    this.version(3).stores({
+      apiProfiles: 'id, name, baseUrl, rememberKey, createdAt, updatedAt',
+      modelCache: 'id, apiProfileId, modelId, fetchedAt',
+      promptProfiles: 'id, name, builtIn, createdAt, updatedAt',
+      sessions: 'id, title, status, currentRound, progress, createdAt, updatedAt',
+      settings: 'key',
+      attachments: 'id, sessionId, createdAt',
     });
   }
 }

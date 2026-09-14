@@ -31,7 +31,10 @@ export const sessionRepo = {
   },
 
   async delete(id: string): Promise<void> {
-    await db.sessions.delete(id);
+    await db.transaction('rw', db.sessions, db.attachments, async () => {
+      await db.sessions.delete(id);
+      await db.attachments.where('sessionId').equals(id).delete();
+    });
   },
 
   async search(query: string): Promise<SessionRecord[]> {
