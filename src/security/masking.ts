@@ -178,28 +178,32 @@ export function maskStreamingText(text: string, secrets: Array<string | undefine
 export function maskStreamingFragment(text: string, secrets: Array<string | undefined> = []): string {
   if (!text || secrets.length === 0) return text;
   const entries = buildSecretEntries(secrets);
-  const decodeMatch = (start: number, target: string): { end: number; escaped: boolean } | undefined => {
-    let raw = start, decoded = '', escaped = false;
-    while (raw < text.length && decoded.length < target.length) {
-      const begin = raw;
-      let value = text[raw++];
-      if (value === '\\' && raw < text.length) {
-        const next = text[raw];
+  const findMatch = (start: number, target: string): { end: number; escaped: boolean } | undefined => {
+    const raw = text.startsWith(target, start) ? { end: start + target.length, escaped: false } : undefined;
+    let decodedRaw = start, decoded = '', escaped = false;
+    while (decodedRaw < text.length && decoded.length < target.length) {
+      const begin = decodedRaw;
+      let value = text[decodedRaw++];
+      if (value === '\\' && decodedRaw < text.length) {
+        const next = text[decodedRaw];
         const simple: Record<string, string> = { '"': '"', '\\': '\\', '/': '/', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' };
-        if (next in simple) { value = simple[next]; raw++; escaped = true; }
-        else if (next === 'u' && /^[0-9a-fA-F]{4}$/.test(text.slice(raw + 1, raw + 5))) { value = String.fromCharCode(parseInt(text.slice(raw + 1, raw + 5), 16)); raw += 5; escaped = true; }
-        else raw = begin + 1;
+        if (next in simple) { value = simple[next]; decodedRaw++; escaped = true; }
+        else if (next === 'u' && /^[0-9a-fA-F]{4}$/.test(text.slice(decodedRaw + 1, decodedRaw + 5))) { value = String.fromCharCode(parseInt(text.slice(decodedRaw + 1, decodedRaw + 5), 16)); decodedRaw += 5; escaped = true; }
+        else decodedRaw = begin + 1;
       }
       decoded += value;
     }
-    return decoded === target ? { end: raw, escaped } : undefined;
+    const wire = decoded === target ? { end: decodedRaw, escaped } : undefined;
+    if (!raw) return wire;
+    if (!wire || raw.end - start >= wire.end - start) return raw;
+    return wire;
   };
   let result = '', index = 0;
   while (index < text.length) {
-    const existing = entries.map((entry) => ({ entry, match: decodeMatch(index, entry.mask) })).filter((candidate): candidate is { entry: SecretEntry; match: { end: number; escaped: boolean } } => !!candidate.match)
+    const existing = entries.map((entry) => ({ entry, match: findMatch(index, entry.mask) })).filter((candidate): candidate is { entry: SecretEntry; match: { end: number; escaped: boolean } } => !!candidate.match)
       .sort((a, b) => (b.entry.mask.length - a.entry.mask.length) || ((b.match.end - index) - (a.match.end - index)))[0];
     if (existing) { result += text.slice(index, existing.match.end); index = existing.match.end; continue; }
-    const match = entries.map((entry) => ({ entry, match: decodeMatch(index, entry.secret) })).filter((candidate): candidate is { entry: SecretEntry; match: { end: number; escaped: boolean } } => !!candidate.match)
+    const match = entries.map((entry) => ({ entry, match: findMatch(index, entry.secret) })).filter((candidate): candidate is { entry: SecretEntry; match: { end: number; escaped: boolean } } => !!candidate.match)
       .sort((a, b) => (b.entry.secret.length - a.entry.secret.length) || ((b.match.end - index) - (a.match.end - index)))[0];
     if (match) { result += match.match.escaped ? JSON.stringify(match.entry.mask).slice(1, -1) : match.entry.mask; index = match.match.end; }
     else { result += text[index]; index++; }
