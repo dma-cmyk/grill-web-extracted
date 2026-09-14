@@ -1,6 +1,6 @@
 import { ILlmProvider, ModelInfo, ProviderError, ProviderErrorCode, StreamChatParams } from '../types/provider';
 import { ApiProfile } from '../types/apiProfile';
-import { maskPlainSecrets, maskSecrets, maskStreamingText, sanitizeErrorDetails, sanitizeHeaders, validateBaseUrl } from '../security/masking';
+import { maskPlainSecrets, maskSecrets, maskStreamingFragment, maskStreamingText, sanitizeErrorDetails, sanitizeHeaders, validateBaseUrl } from '../security/masking';
 import { processSseStream, processSseText } from './sseStream';
 
 export class OpenAICompatibleProvider implements ILlmProvider {
@@ -301,7 +301,7 @@ export class OpenAICompatibleProvider implements ILlmProvider {
           const streamResult = await processSseStream(
             response,
             (chunk, accumulated) => {
-              if (onChunk) onChunk(maskStreamingText(chunk, secrets), maskStreamingText(accumulated, secrets));
+              if (onChunk) onChunk(maskStreamingFragment(chunk, secrets), maskStreamingText(accumulated, secrets));
             },
             signal
           );
@@ -327,7 +327,7 @@ export class OpenAICompatibleProvider implements ILlmProvider {
         const hasDataLine = text.split('\n').some((line) => line.trim().startsWith('data:'));
         if (hasDataLine) {
           const streamed = processSseText(text, (chunk, accumulated) => {
-            if (onChunk) onChunk(maskStreamingText(chunk, secrets), maskStreamingText(accumulated, secrets));
+            if (onChunk) onChunk(maskStreamingFragment(chunk, secrets), maskStreamingText(accumulated, secrets));
           });
           return maskSecrets(streamed, secrets);
         }

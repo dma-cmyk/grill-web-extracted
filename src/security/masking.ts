@@ -176,7 +176,37 @@ export function maskStreamingText(text: string, secrets: Array<string | undefine
   const entries = buildSecretEntries(secrets);
   return isStructuredStream(text) ? maskStructuredStream(text, entries) : maskDecodedText(text, entries);
 }
-
+export function maskStreamingFragment(text: string, secrets: Array<string | undefined> = []): string {
+  if (!text || secrets.length === 0) return text;
+  const entries = buildSecretEntries(secrets);
+  const decodeMatch = (start: number, target: string): { end: number; escaped: boolean } | undefined => {
+    let raw = start, decoded = '', escaped = false;
+    while (raw < text.length && decoded.length < target.length) {
+      const begin = raw;
+      let value = text[raw++];
+      if (value === '\\' && raw < text.length) {
+        const next = text[raw];
+        const simple: Record<string, string> = { '"': '"', '\\': '\\', '/': '/', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' };
+        if (next in simple) { value = simple[next]; raw++; escaped = true; }
+        else if (next === 'u' && /^[0-9a-fA-F]{4}$/.test(text.slice(raw + 1, raw + 5))) { value = String.fromCharCode(parseInt(text.slice(raw + 1, raw + 5), 16)); raw += 5; escaped = true; }
+        else raw = begin + 1;
+      }
+      decoded += value;
+    }
+    return decoded === target ? { end: raw, escaped } : undefined;
+  };
+  let result = '', index = 0;
+  while (index < text.length) {
+    const existing = entries.map((entry) => ({ entry, match: decodeMatch(index, entry.mask) })).filter((candidate): candidate is { entry: SecretEntry; match: { end: number; escaped: boolean } } => !!candidate.match)
+      .sort((a, b) => (b.entry.mask.length - a.entry.mask.length) || ((b.match.end - index) - (a.match.end - index)))[0];
+    if (existing) { result += text.slice(index, existing.match.end); index = existing.match.end; continue; }
+    const match = entries.map((entry) => ({ entry, match: decodeMatch(index, entry.secret) })).filter((candidate): candidate is { entry: SecretEntry; match: { end: number; escaped: boolean } } => !!candidate.match)
+      .sort((a, b) => (b.entry.secret.length - a.entry.secret.length) || ((b.match.end - index) - (a.match.end - index)))[0];
+    if (match) { result += match.match.escaped ? JSON.stringify(match.entry.mask).slice(1, -1) : match.entry.mask; index = match.match.end; }
+    else { result += text[index]; index++; }
+  }
+  return result;
+}
 /** Preserve structured response syntax when possible, otherwise mask plain text. */
 export function maskResponseText(text: string, secrets: Array<string | undefined> = []): string {
   const trimmed = text.trim();
