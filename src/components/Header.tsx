@@ -1,6 +1,6 @@
 import React from 'react';
 import { RoutePath } from '../app/router';
-import { Flame, Layers, Key, FileCode, Play } from 'lucide-react';
+import { Flame, Layers, Key, FileCode, Play, Github } from 'lucide-react';
 
 interface HeaderProps {
   currentRoute: RoutePath;
@@ -94,6 +94,17 @@ export const Header: React.FC<HeaderProps> = ({
             <FileCode className="w-4 h-4" />
             <span>プロンプト</span>
           </button>
+
+          <a
+            href="https://github.com/dma-cmyk/grill-web-extracted"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub リポジトリを新しいタブで開く"
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800"
+          >
+            <Github className="w-4 h-4" aria-hidden="true" />
+            <span>GitHub</span>
+          </a>
         </nav>
       </div>
     </header>
