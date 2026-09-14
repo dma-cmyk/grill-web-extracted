@@ -1,6 +1,6 @@
 import { ILlmProvider, ModelInfo, ProviderError, ProviderErrorCode, StreamChatParams } from '../types/provider';
 import { ApiProfile } from '../types/apiProfile';
-import { sanitizeErrorDetails, sanitizeHeaders, validateBaseUrl } from '../security/masking';
+import { maskPlainSecrets, maskSecrets, maskStreamingFragment, maskStreamingText, sanitizeErrorDetails, sanitizeHeaders, validateBaseUrl } from '../security/masking';
 import { processSseStream, processSseText } from './sseStream';
 
 export class OpenAICompatibleProvider implements ILlmProvider {
@@ -154,7 +154,7 @@ export class OpenAICompatibleProvider implements ILlmProvider {
     const start = performance.now();
     const cleanUrl = this.normalizeUrl(profile.baseUrl);
     const modelsEndpoint = `${cleanUrl}/models`;
-    const secrets = [apiKey || '', profile.apiKey || ''];
+    const secrets = [apiKey || '', profile.apiKey || '', ...(profile.headers?.map((header) => header.value) || [])];
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
@@ -226,13 +226,13 @@ export class OpenAICompatibleProvider implements ILlmProvider {
       const json = await response.json();
       if (Array.isArray(json.data)) {
         return json.data.map((m: any) => ({
-          id: m.id || String(m),
-          name: m.id || m.name || String(m),
+          id: maskPlainSecrets(m.id || String(m), secrets),
+          name: maskPlainSecrets(m.id || m.name || String(m), secrets),
         }));
       } else if (Array.isArray(json.models)) {
         return json.models.map((m: any) => ({
-          id: m.id || m.name || String(m),
-          name: m.displayName || m.name || m.id || String(m),
+          id: maskPlainSecrets(m.id || m.name || String(m), secrets),
+          name: maskPlainSecrets(m.displayName || m.name || m.id || String(m), secrets),
         }));
       }
 
@@ -301,11 +301,11 @@ export class OpenAICompatibleProvider implements ILlmProvider {
           const streamResult = await processSseStream(
             response,
             (chunk, accumulated) => {
-              if (onChunk) onChunk(chunk, accumulated);
+              if (onChunk) onChunk(maskStreamingFragment(chunk, secrets), maskStreamingText(accumulated, secrets));
             },
             signal
           );
-          return streamResult;
+          return maskSecrets(streamResult, secrets);
         } catch (streamErr: unknown) {
           if (
             streamErr &&
@@ -326,9 +326,10 @@ export class OpenAICompatibleProvider implements ILlmProvider {
       } catch {
         const hasDataLine = text.split('\n').some((line) => line.trim().startsWith('data:'));
         if (hasDataLine) {
-          return processSseText(text, (chunk, accumulated) => {
-            if (onChunk) onChunk(chunk, accumulated);
+          const streamed = processSseText(text, (chunk, accumulated) => {
+            if (onChunk) onChunk(maskStreamingFragment(chunk, secrets), maskStreamingText(accumulated, secrets));
           });
+          return maskSecrets(streamed, secrets);
         }
 
         const preview = sanitizeErrorDetails(text, secrets).slice(0, 200);
@@ -341,7 +342,7 @@ export class OpenAICompatibleProvider implements ILlmProvider {
         throw parseError;
       }
 
-      const content = this.extractContent(json);
+      const content = maskSecrets(this.extractContent(json), secrets);
       if (onChunk) onChunk(content, content);
       return content;
     } catch (err: any) {

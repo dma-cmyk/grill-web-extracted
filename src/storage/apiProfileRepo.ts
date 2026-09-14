@@ -1,6 +1,7 @@
 import { db } from './db';
 import { ApiProfile, ModelCacheItem } from '../types/apiProfile';
 import { inMemoryKeyStore } from '../security/inMemoryKeyStore';
+import { maskPlainSecrets } from '../security/masking';
 
 const withMemoryCredentials = (profile: ApiProfile): ApiProfile => {
   if (profile.rememberKey) return profile;
@@ -49,18 +50,28 @@ export const apiProfileRepo = {
 
 
   async getCachedModels(apiProfileId: string): Promise<ModelCacheItem[]> {
-    return db.modelCache.where('apiProfileId').equals(apiProfileId).toArray();
+    const models = await db.modelCache.where('apiProfileId').equals(apiProfileId).toArray();
+    const profile = await apiProfileRepo.getById(apiProfileId);
+    const secrets = profile ? [profile.apiKey, ...(profile.headers || []).map((header) => header.value)] : [];
+    return models.map((model) => ({
+      ...model,
+      id: maskPlainSecrets(model.id, secrets),
+      modelId: maskPlainSecrets(model.modelId, secrets),
+      displayName: maskPlainSecrets(model.displayName, secrets),
+    }));
   },
 
   async saveCachedModels(apiProfileId: string, models: Array<{ id: string; name: string }>): Promise<void> {
     const now = Date.now();
+    const profile = await apiProfileRepo.getById(apiProfileId);
+    const secrets = profile ? [profile.apiKey, ...(profile.headers || []).map((header) => header.value)] : [];
     await db.transaction('rw', db.modelCache, async () => {
       await db.modelCache.where('apiProfileId').equals(apiProfileId).delete();
       const items: ModelCacheItem[] = models.map((m) => ({
-        id: `${apiProfileId}:${m.id}`,
+        id: `${apiProfileId}:${maskPlainSecrets(m.id, secrets)}`,
         apiProfileId,
-        modelId: m.id,
-        displayName: m.name || m.id,
+        modelId: maskPlainSecrets(m.id, secrets),
+        displayName: maskPlainSecrets(m.name || m.id, secrets),
         fetchedAt: now,
       }));
       await db.modelCache.bulkPut(items);
