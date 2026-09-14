@@ -344,6 +344,9 @@ export class OpenAICompatibleProvider implements ILlmProvider {
         };
         throw parseError;
       }
+      const content = maskSecrets(this.extractContent(json), secrets);
+      if (onChunk) onChunk(content, content);
+      return content;
     } catch (err: any) {
       if (err.code) throw err;
       throw this.classifyError(err, undefined, secrets);
