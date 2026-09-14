@@ -476,8 +476,12 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
   /**
    * Resends the exact request captured immediately before its original send.
    */
-  const resendLastRequest = async () => {
-    const snapshot = lastRequestRef.current;
+  const resendLastRequest = async (snapshotOverride?: {
+    requestSession: SessionRecord;
+    baseSession: SessionRecord;
+    isRepairAttempt: boolean;
+  }) => {
+    const snapshot = snapshotOverride || lastRequestRef.current;
     if (!snapshot) return;
 
     const reqId = 'req-' + Date.now();
@@ -512,8 +516,13 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     if (!session) return;
     if (session.rounds.length === 0) {
       await startInitialRound(session);
-    } else if (lastRequestRef.current) {
-      await resendLastRequest();
+    } else {
+      const snapshot = lastRequestRef.current || {
+        requestSession: session,
+        baseSession: session,
+        isRepairAttempt: false,
+      };
+      await resendLastRequest(snapshot);
     }
   };
 

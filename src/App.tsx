@@ -8,13 +8,15 @@ import { HandoffView } from './features/handoff/HandoffView';
 import { ApiProfilesView } from './features/settings/ApiProfilesView';
 import { PromptProfilesView } from './features/settings/PromptProfilesView';
 import { ensureDatabaseInitialized } from './storage/db';
+import { sessionRepo } from './storage/sessionRepo';
 
 export default function App() {
   const { currentRoute, navigate } = useRouter();
   const [dbReady, setDbReady] = useState(false);
 
   useEffect(() => {
-    ensureDatabaseInitialized().then(() => {
+    ensureDatabaseInitialized().then(async () => {
+      await sessionRepo.normalizeTransientStatuses();
       setDbReady(true);
     });
   }, []);

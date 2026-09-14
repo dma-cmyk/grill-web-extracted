@@ -16,6 +16,19 @@ export const sessionRepo = {
       updatedAt: Date.now(),
     });
   },
+  async normalizeTransientStatuses(): Promise<void> {
+    const sessions = await db.sessions.toArray();
+    for (const session of sessions) {
+      if (session.status !== 'requesting' && session.status !== 'receiving' && session.status !== 'parsing') {
+        continue;
+      }
+      await this.save({
+        ...session,
+        status: 'aborted',
+        lastError: 'リロードにより実行中のリクエストが中断されました',
+      });
+    }
+  },
 
   async delete(id: string): Promise<void> {
     await db.sessions.delete(id);
