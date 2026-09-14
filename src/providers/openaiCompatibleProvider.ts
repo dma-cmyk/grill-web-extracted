@@ -1,6 +1,6 @@
 import { ILlmProvider, ModelInfo, ProviderError, ProviderErrorCode, StreamChatParams } from '../types/provider';
 import { ApiProfile } from '../types/apiProfile';
-import { maskPlainSecrets, maskSecrets, maskStreamingFragment, maskStreamingText, sanitizeErrorDetails, sanitizeHeaders, validateBaseUrl } from '../security/masking';
+import { containsShortSecret, maskPlainSecrets, maskSecrets, maskStreamingFragment, maskStreamingText, sanitizeErrorDetails, sanitizeHeaders, validateBaseUrl } from '../security/masking';
 import { processSseStream, processSseText } from './sseStream';
 
 export class OpenAICompatibleProvider implements ILlmProvider {
@@ -91,23 +91,25 @@ export class OpenAICompatibleProvider implements ILlmProvider {
 
     // Network / CORS / Browser fetch errors
     const rawMsg = String(err?.message || err || '');
-    const cleanMsg = sanitizeErrorDetails(rawMsg, secretList);
+    const hasShortSecret = containsShortSecret(rawMsg, secretList);
+    const cleanMsg = hasShortSecret ? '' : sanitizeErrorDetails(rawMsg, secretList);
 
     if (rawMsg.includes('Failed to fetch') || rawMsg.includes('NetworkError') || rawMsg.includes('CORS')) {
       return {
         code: 'CORS_ERROR',
         message: '通信に失敗しました。接続先サーバーがブラウザからのCORS (Cross-Origin Resource Sharing) を許可していないか、URLが正しくありません。',
-        details: cleanMsg,
+        ...(cleanMsg ? { details: cleanMsg } : {}),
         isRetryable: true,
       };
     }
 
     return {
       code: 'NETWORK_ERROR',
-      message: `通信エラー: ${cleanMsg}`,
-      details: cleanMsg,
+      message: cleanMsg ? `通信エラー: ${cleanMsg}` : '通信エラーが発生しました。',
+      ...(cleanMsg ? { details: cleanMsg } : {}),
       isRetryable: true,
     };
+
   }
   private extractContent(json: unknown): string {
     if (!json || typeof json !== 'object' || !('choices' in json)) {
@@ -332,16 +334,16 @@ export class OpenAICompatibleProvider implements ILlmProvider {
           return maskSecrets(streamed, secrets);
         }
 
-        const preview = sanitizeErrorDetails(text, secrets).slice(0, 200);
+        const hasShortSecret = containsShortSecret(text, secrets);
+        const preview = hasShortSecret ? '' : sanitizeErrorDetails(text, secrets).slice(0, 200);
         const parseError: ProviderError = {
           code: 'PARSE_ERROR',
-          message: `API応答の形式を判別できませんでした。本文: ${preview}`,
-          details: preview,
+          message: preview ? `API応答の形式を判別できませんでした。本文: ${preview}` : 'API応答の形式を判別できませんでした。',
+          ...(preview ? { details: preview } : {}),
           isRetryable: true,
         };
         throw parseError;
       }
-
       const content = maskSecrets(this.extractContent(json), secrets);
       if (onChunk) onChunk(content, content);
       return content;

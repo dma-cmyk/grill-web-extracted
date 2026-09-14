@@ -263,6 +263,13 @@ export function sanitizeHeaders(headers?: Array<{ key: string; value: string }>)
   }
   return result;
 }
+/** Return whether text contains any protected value short enough to make replacement unsafe. */
+export function containsShortSecret(text: string, secrets: Array<string | undefined> = []): boolean {
+  if (!text) return false;
+  return Array.from(new Set(secrets.map((secret) => secret?.trim()).filter((secret): secret is string => !!secret)))
+    .some((secret) => secret.length <= 4 && text.includes(secret));
+}
+
 
 export function sanitizeErrorDetails(message: string, secrets: string[] = []): string {
   let cleaned = maskPlainSecrets(message, secrets);
