@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RoutePath } from '../../app/router';
 import { Dialog } from '../../components/Dialog';
-import { SessionRecord, GrillStatus } from '../../types/session';
+import { SessionRecord, ChatAttachmentPayload, GrillStatus } from '../../types/session';
 import { QuestionAnswer, GrillRound } from '../../types/grillRound';
 import { sessionRepo } from '../../storage/sessionRepo';
 import { apiProfileRepo } from '../../storage/apiProfileRepo';
+import { attachmentRepo } from '../../storage/attachmentRepo';
 import { inMemoryKeyStore } from '../../security/inMemoryKeyStore';
 import { getProviderForProfile } from '../../providers';
 import { buildInitialMessages, buildAnswersMessage } from '../../core/promptBuilder';
@@ -32,6 +33,21 @@ import {
 interface GrillViewProps {
   sessionId: string;
   onNavigate: (route: RoutePath) => void;
+}
+
+function readBlobAsDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('画像をData URLに変換できませんでした'));
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error('画像を読み込めませんでした'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) => {
@@ -81,6 +97,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      activeRequestIdRef.current = null;
     };
   }, [sessionId]);
 
@@ -148,25 +165,56 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     const reqId = 'req-' + Date.now();
     activeRequestIdRef.current = reqId;
 
-    const initialMessages = buildInitialMessages(
-      s.theme,
-      s.selectionSnapshot,
-      s.promptSnapshot
-    );
-
-    const updatedSession: SessionRecord = {
-      ...s,
-      messages: initialMessages,
-      status: 'requesting',
-      currentRound: 1,
-      pendingRepair: undefined,
-    };
-    await updateSession(() => updatedSession);
-    if (activeRequestIdRef.current !== reqId) return;
-
-    setStreamingText('');
-
     try {
+      const attachmentRecords = await attachmentRepo.listBySession(sessionId);
+      if (activeRequestIdRef.current !== reqId) return;
+
+      const attachmentPayloads: ChatAttachmentPayload[] = [];
+      for (const attachment of attachmentRecords) {
+        if (attachment.kind === 'image') {
+          const dataUrl = await readBlobAsDataUrl(attachment.blob);
+          if (activeRequestIdRef.current !== reqId) return;
+          attachmentPayloads.push({
+            name: attachment.name,
+            mimeType: attachment.mimeType,
+            sizeBytes: attachment.sizeBytes,
+            kind: attachment.kind,
+            dataUrl,
+          });
+        } else {
+          const textContent = await attachment.blob.text();
+          if (activeRequestIdRef.current !== reqId) return;
+          attachmentPayloads.push({
+            name: attachment.name,
+            mimeType: attachment.mimeType,
+            sizeBytes: attachment.sizeBytes,
+            kind: attachment.kind,
+            textContent,
+          });
+        }
+      }
+      if (activeRequestIdRef.current !== reqId) return;
+
+      const initialMessages = buildInitialMessages(
+        s.theme,
+        s.selectionSnapshot,
+        s.promptSnapshot,
+        attachmentPayloads
+      );
+      if (activeRequestIdRef.current !== reqId) return;
+
+      const updatedSession: SessionRecord = {
+        ...s,
+        messages: initialMessages,
+        status: 'requesting',
+        currentRound: 1,
+        pendingRepair: undefined,
+      };
+      await updateSession(() => updatedSession);
+      if (activeRequestIdRef.current !== reqId) return;
+
+      setStreamingText('');
+
       // Step: receiving
       await updateSession((curr) => ({ ...curr, status: 'receiving' }));
       if (activeRequestIdRef.current !== reqId) return;
@@ -187,7 +235,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       if (activeRequestIdRef.current !== reqId) return;
 
       await handleReceivedResponse(fullOutput, updatedSession, reqId, false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (activeRequestIdRef.current !== reqId) return;
       await handleLlmError(err);
     }

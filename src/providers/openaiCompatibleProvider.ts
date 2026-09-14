@@ -1,7 +1,66 @@
 import { ILlmProvider, ModelInfo, ProviderError, ProviderErrorCode, StreamChatParams } from '../types/provider';
 import { ApiProfile } from '../types/apiProfile';
+import { ChatAttachmentPayload, ChatMessage } from '../types/session';
+import { formatBytes } from '../core/attachmentValidation';
 import { containsShortSecret, maskPlainSecrets, maskSecrets, maskStreamingFragment, maskStreamingText, sanitizeErrorDetails, sanitizeHeaders, validateBaseUrl } from '../security/masking';
 import { processSseStream, processSseText } from './sseStream';
+
+type RequestMessagePart =
+  | {
+      type: 'text';
+      text: string;
+    }
+  | {
+      type: 'image_url';
+      image_url: {
+        url: string;
+      };
+    };
+
+interface RequestMessage {
+  role: ChatMessage['role'];
+  content: string | RequestMessagePart[];
+}
+
+export function toRequestMessages(messages: ChatMessage[]): RequestMessage[] {
+  return messages.map((message) => {
+    if (!message.attachments?.length) {
+      return {
+        role: message.role,
+        content: message.content,
+      };
+    }
+
+    const parts: RequestMessagePart[] = [
+      {
+        type: 'text',
+        text: message.content,
+      },
+    ];
+
+    message.attachments.forEach((attachment: ChatAttachmentPayload) => {
+      if (attachment.kind === 'image') {
+        parts.push({
+          type: 'image_url',
+          image_url: {
+            url: attachment.dataUrl || '',
+          },
+        });
+        return;
+      }
+
+      parts.push({
+        type: 'text',
+        text: `添付ファイル: ${attachment.name} (${attachment.mimeType}, ${formatBytes(attachment.sizeBytes)})\n${attachment.textContent ?? ''}`,
+      });
+    });
+
+    return {
+      role: message.role,
+      content: parts,
+    };
+  });
+}
 
 export class OpenAICompatibleProvider implements ILlmProvider {
   /**
@@ -266,10 +325,7 @@ export class OpenAICompatibleProvider implements ILlmProvider {
       ...(profile.headers?.map((header) => header.value.trim()) || []),
     ];
 
-    const formattedMessages = messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    const formattedMessages = toRequestMessages(messages);
 
     const payload = {
       model,
