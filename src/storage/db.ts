@@ -146,3 +146,9 @@ export async function ensureDatabaseInitialized(): Promise<void> {
     await db.promptProfiles.bulkAdd(DEFAULT_PROMPT_PROFILES);
   }
 }
+
+/** Deletes the local database so initialization can be retried from a clean state. */
+export async function resetDatabase(): Promise<void> {
+  await db.delete();
+  await db.open();
+}
