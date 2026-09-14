@@ -53,6 +53,7 @@ export interface SessionRecord {
   finalHandoff?: string;
   lastError?: string;
   lastRawResponse?: string;
+  pendingRepair?: boolean;
   createdAt: number;
   updatedAt: number;
 }
