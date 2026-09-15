@@ -2,6 +2,13 @@ import { PromptProfile } from '../types/promptProfile';
 
 export const DEFAULT_PROMPT_PROFILE_ID = 'builtin-standard';
 
+/**
+ * 組み込み Prompt Profile 集合の版番号。組み込みを追加したら増やす。
+ * 1 = 初期の3件 (builtin-standard / builtin-lean-mvp / builtin-technical)
+ * 2 = 日常4件 (tasks / writing / learning / decision) とゲーム1件を加えた現在の8件
+ */
+export const BUILTIN_PROMPT_SEED_VERSION = 2;
+
 export const DEFAULT_PROMPT_PROFILES: PromptProfile[] = [
   {
     id: 'builtin-standard',
