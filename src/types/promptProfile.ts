@@ -4,6 +4,7 @@ export interface PromptProfile {
   description: string;
   systemPrompt: string;
   builtIn: boolean;
+  sortOrder?: number;
   createdAt: number;
   updatedAt: number;
 }
