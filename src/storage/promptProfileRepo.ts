@@ -1,4 +1,4 @@
-import { db } from './db';
+import { db, ensureDatabaseInitialized } from './db';
 import { DEFAULT_PROMPT_PROFILES } from './defaultPromptProfiles';
 import { PromptProfile } from '../types/promptProfile';
 
@@ -22,12 +22,8 @@ export function sortPromptProfiles(profiles: PromptProfile[]): PromptProfile[] {
 
 export const promptProfileRepo = {
   async getAll(): Promise<PromptProfile[]> {
-    const list = await db.promptProfiles.toArray();
-    if (list.length === 0) {
-      await db.promptProfiles.bulkAdd(DEFAULT_PROMPT_PROFILES);
-      return sortPromptProfiles(DEFAULT_PROMPT_PROFILES);
-    }
-    return sortPromptProfiles(list);
+    await ensureDatabaseInitialized();
+    return sortPromptProfiles(await db.promptProfiles.toArray());
   },
 
   async getById(id: string): Promise<PromptProfile | undefined> {

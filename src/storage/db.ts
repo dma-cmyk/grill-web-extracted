@@ -1,7 +1,7 @@
 import Dexie, { Table } from 'dexie';
 import { ApiProfile, ModelCacheItem } from '../types/apiProfile';
 import { PromptProfile } from '../types/promptProfile';
-import { DEFAULT_PROMPT_PROFILES } from './defaultPromptProfiles';
+import { BUILTIN_PROMPT_SEED_VERSION, DEFAULT_PROMPT_PROFILES } from './defaultPromptProfiles';
 import { SessionRecord } from '../types/session';
 import { AttachmentRecord } from '../types/attachment';
 export interface AppSetting {
@@ -55,14 +55,24 @@ export class GrillDatabase extends Dexie {
 
 export const db = new GrillDatabase();
 
+const BUILTIN_PROMPT_SEED_VERSION_KEY = 'builtinPromptSeedVersion';
+
 /**
- * Ensures default prompt profiles are initialized in the database
+ * 不足している組み込み Prompt Profile だけを追加し、シードバージョンを記録する。
+ * 既存レコード(ユーザーが手を入れた組み込み・カスタム)は更新も上書きもしない。
  */
 export async function ensureDatabaseInitialized(): Promise<void> {
-  const count = await db.promptProfiles.count();
-  if (count === 0) {
-    await db.promptProfiles.bulkAdd(DEFAULT_PROMPT_PROFILES);
-  }
+  await db.transaction('rw', db.promptProfiles, db.settings, async () => {
+    const existing = await db.promptProfiles.bulkGet(DEFAULT_PROMPT_PROFILES.map((profile) => profile.id));
+    const missing = DEFAULT_PROMPT_PROFILES.filter((_, index) => existing[index] === undefined);
+    if (missing.length > 0) {
+      await db.promptProfiles.bulkAdd(missing);
+    }
+    const recorded = await db.settings.get(BUILTIN_PROMPT_SEED_VERSION_KEY);
+    if (recorded?.value !== BUILTIN_PROMPT_SEED_VERSION) {
+      await db.settings.put({ key: BUILTIN_PROMPT_SEED_VERSION_KEY, value: BUILTIN_PROMPT_SEED_VERSION });
+    }
+  });
 }
 
 /** Deletes the local database so initialization can be retried from a clean state. */
