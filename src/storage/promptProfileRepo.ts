@@ -1,14 +1,33 @@
-import { db, DEFAULT_PROMPT_PROFILES } from './db';
+import { db } from './db';
+import { DEFAULT_PROMPT_PROFILES } from './defaultPromptProfiles';
 import { PromptProfile } from '../types/promptProfile';
+
+const FALLBACK_SORT_ORDER = 1000;
+const BUILTIN_SORT_ORDER: Record<string, number> = Object.fromEntries(
+  DEFAULT_PROMPT_PROFILES.map((profile) => [profile.id, profile.sortOrder ?? FALLBACK_SORT_ORDER]),
+);
+
+const effectiveSortOrder = (profile: PromptProfile): number =>
+  profile.sortOrder ?? BUILTIN_SORT_ORDER[profile.id] ?? FALLBACK_SORT_ORDER;
+
+export function sortPromptProfiles(profiles: PromptProfile[]): PromptProfile[] {
+  return [...profiles].sort((a, b) => {
+    if (a.builtIn !== b.builtIn) return a.builtIn ? -1 : 1;
+    const order = a.builtIn
+      ? effectiveSortOrder(a) - effectiveSortOrder(b)
+      : (a.createdAt || 0) - (b.createdAt || 0);
+    return order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  });
+}
 
 export const promptProfileRepo = {
   async getAll(): Promise<PromptProfile[]> {
     const list = await db.promptProfiles.toArray();
     if (list.length === 0) {
       await db.promptProfiles.bulkAdd(DEFAULT_PROMPT_PROFILES);
-      return DEFAULT_PROMPT_PROFILES;
+      return sortPromptProfiles(DEFAULT_PROMPT_PROFILES);
     }
-    return list;
+    return sortPromptProfiles(list);
   },
 
   async getById(id: string): Promise<PromptProfile | undefined> {

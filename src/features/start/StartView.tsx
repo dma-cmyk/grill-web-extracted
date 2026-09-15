@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RoutePath } from '../../app/router';
 import { ApiProfile, ModelCacheItem } from '../../types/apiProfile';
+import { DEFAULT_PROMPT_PROFILE_ID } from '../../storage/defaultPromptProfiles';
 import { PromptProfile } from '../../types/promptProfile';
 import { SessionRecord, SelectionSnapshot } from '../../types/session';
 import { AttachmentDraft } from '../../types/attachment';
@@ -72,7 +73,8 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
       const prompts = await promptProfileRepo.getAll();
       setPromptProfiles(prompts);
       if (prompts.length > 0) {
-        setSelectedPromptId(prompts[0].id);
+        const defaultPrompt = prompts.find((prompt) => prompt.id === DEFAULT_PROMPT_PROFILE_ID) ?? prompts[0];
+        setSelectedPromptId(defaultPrompt.id);
       }
 
       setLoading(false);
