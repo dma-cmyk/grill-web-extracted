@@ -13,7 +13,7 @@ import { inMemoryKeyStore } from '../../security/inMemoryKeyStore';
 import { maskPlainSecrets } from '../../security/masking';
 import { MOCK_API_PROFILE } from '../../providers/mockProvider';
 import { ATTACHMENT_ACCEPT_ATTRIBUTE, describeAttachmentLimits, formatBytes, validateAttachmentFile } from '../../core/attachmentValidation';
-import { Flame, Play, Sparkles, Sliders, ShieldCheck, Key, ArrowRight, HelpCircle } from 'lucide-react';
+import { Flame, Play, Sparkles, Sliders, ShieldCheck, Key, ArrowRight, HelpCircle, Search } from 'lucide-react';
 
 interface StartViewProps {
   onNavigate: (route: RoutePath) => void;
@@ -25,6 +25,8 @@ const SAMPLE_THEMES = [
   'CORS対応のOpenAI互換APIへ直接ストリーミング接続できる、軽量テストクライアント',
 ];
 
+const normalizeModelSearchValue = (value: string) => value.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+
 export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
   const [theme, setTheme] = useState('');
   const [depth, setDepth] = useState<SelectionSnapshot['depth']>('standard');
@@ -33,12 +35,16 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
   const [cachedModels, setCachedModels] = useState<ModelCacheItem[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [customModelInput, setCustomModelInput] = useState<string>('');
+  const [modelQuery, setModelQuery] = useState('');
+  const [modelsLoading, setModelsLoading] = useState(true);
   const [promptProfiles, setPromptProfiles] = useState<PromptProfile[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState<string>('');
   const [sessionApiKey, setSessionApiKey] = useState<string>('');
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const imageObjectUrls = useRef(new Map<string, string>());
+  const modelSearchInputRef = useRef<HTMLInputElement>(null);
+  const profileLoadGenerationRef = useRef(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -46,9 +52,9 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
   useEffect(() => {
     async function init() {
       setLoading(true);
+      const generation = profileLoadGenerationRef.current;
       let profiles = await apiProfileRepo.getAll();
       if (profiles.length === 0) {
-        // Seed default mock simulator so the app is immediately usable
         await apiProfileRepo.save(MOCK_API_PROFILE);
         await apiProfileRepo.saveCachedModels(MOCK_API_PROFILE.id, [
           { id: 'mock-grill-fast', name: 'Grill Simulator (Fast 2-Round)' },
@@ -62,12 +68,13 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
       if (defaultProfile) {
         setSelectedProfileId(defaultProfile.id);
         const models = await apiProfileRepo.getCachedModels(defaultProfile.id);
-        setCachedModels(models);
-        if (models.length > 0) {
-          setSelectedModelId(models[0].modelId);
-        } else {
-          setSelectedModelId('gpt-4o');
+        if (profileLoadGenerationRef.current === generation) {
+          setCachedModels(models);
+          setSelectedModelId(models.length > 0 ? models[0].modelId : 'gpt-4o');
+          setModelsLoading(false);
         }
+      } else {
+        setModelsLoading(false);
       }
 
       const prompts = await promptProfileRepo.getAll();
@@ -83,15 +90,19 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
   }, []);
 
   const handleProfileChange = async (profileId: string) => {
+    const generation = ++profileLoadGenerationRef.current;
     setSelectedProfileId(profileId);
+    setModelQuery('');
+    setCachedModels([]);
+    setSelectedModelId('');
+    setModelsLoading(true);
     const models = await apiProfileRepo.getCachedModels(profileId);
+    if (profileLoadGenerationRef.current !== generation) return;
     setCachedModels(models);
-    if (models.length > 0) {
-      setSelectedModelId(models[0].modelId);
-    } else {
-      setSelectedModelId('gpt-4o');
-    }
+    setSelectedModelId(models.length > 0 ? models[0].modelId : 'gpt-4o');
+    setModelsLoading(false);
   };
+
 
   const handleAttachmentChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
@@ -146,10 +157,30 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
     !selectedProfile.rememberKey &&
     !inMemoryKeyStore.has(selectedProfile.id);
 
+  const normalizedModelQuery = normalizeModelSearchValue(modelQuery);
+  const filteredCachedModels = normalizedModelQuery
+    ? cachedModels.filter((model) => {
+        const normalizedId = normalizeModelSearchValue(model.modelId);
+        const normalizedDisplayName = normalizeModelSearchValue(model.displayName);
+        return normalizedId.includes(normalizedModelQuery) || normalizedDisplayName.includes(normalizedModelQuery);
+      })
+    : cachedModels;
+  const selectedCachedModel = cachedModels.find((model) => model.modelId === selectedModelId);
+  const visibleModels =
+    selectedModelId !== '__custom__' && selectedModelId && !filteredCachedModels.some((model) => model.modelId === selectedModelId)
+      ? selectedCachedModel
+        ? [selectedCachedModel, ...filteredCachedModels]
+        : [{ modelId: selectedModelId, displayName: selectedModelId }, ...filteredCachedModels]
+      : filteredCachedModels;
+
   const handleStartGrill = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
+    if (modelsLoading) {
+      setFormError('モデル一覧の読み込みが完了するまでお待ちください');
+      return;
+    }
     if (!theme.trim()) {
       setFormError('検討したいテーマを入力してください');
       return;
@@ -239,7 +270,6 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 space-y-8">
-      {/* Hero card */}
       <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-700/60 relative overflow-hidden">
         <div className="relative z-10 max-w-2xl space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 border border-orange-500/30 text-orange-400 text-xs font-semibold tracking-wide">
@@ -438,60 +468,59 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
             </select>
 
             {/* In-memory key input if needed */}
-            {needsSessionKey && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1.5">
-                <label className="block text-xs font-semibold text-amber-900">
-                  このセッション用のAPIキー (メモリ内保持)
-                </label>
-                <input
-                  type="password"
-                  placeholder="sk-..."
-                  value={sessionApiKey}
-                  onChange={(e) => setSessionApiKey(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-amber-300 rounded-lg text-xs font-mono bg-white"
-                />
-                <p className="text-[11px] text-amber-800">
-                  ※ このProfileはブラウザ保存が無効のため、現在のタブメモリでのみ利用されます。
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Model selection */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-            <label className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Play className="w-4 h-4 text-orange-500" />
-              5. 使用モデル
-            </label>
-
-            <div className="space-y-2">
-              <select
-                value={selectedModelId}
-                onChange={(e) => setSelectedModelId(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30"
-              >
-                {cachedModels.map((m) => (
-                  <option key={m.modelId} value={m.modelId}>
-                    {m.displayName}
-                  </option>
-                ))}
-                <option value="__custom__">-- 手動入力 (直接指定) --</option>
-              </select>
-
-              {selectedModelId === '__custom__' && (
-                <input
-                  type="text"
-                  placeholder="例: gpt-4o-mini, claude-3-5-sonnet, llama-3"
-                  value={customModelInput}
-                  onChange={(e) => setCustomModelInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono"
-                />
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+              <input
+                ref={modelSearchInputRef}
+                id="model-search-input"
+                type="search"
+                placeholder="モデル名またはIDで検索..."
+                value={modelQuery}
+                onChange={(e) => setModelQuery(e.target.value)}
+                aria-describedby="model-search-status"
+                className="w-full pl-10 pr-20 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
+              />
+              {modelQuery && (
+                <button type="button" onClick={() => { setModelQuery(''); modelSearchInputRef.current?.focus(); }} className="absolute right-3 top-2.5 text-xs text-orange-600 hover:underline">クリア</button>
               )}
             </div>
+            <select
+              id="model-select"
+              value={selectedModelId}
+              onChange={(e) => setSelectedModelId(e.target.value)}
+              aria-describedby="model-search-status"
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30"
+            >
+              {visibleModels.map((m, index) => (
+                <option key={`${m.modelId}-${index}`} value={m.modelId}>{m.displayName}</option>
+              ))}
+              <option value="__custom__">-- 手動入力 (直接指定) --</option>
+            </select>
+
+            <p id="model-search-status" role="status" aria-live="polite" className="text-xs text-slate-500">
+              {modelsLoading ? 'モデル一覧を読み込み中...' : `${filteredCachedModels.length}件のモデルが見つかりました`}
+            </p>
+            {!modelsLoading && normalizedModelQuery && filteredCachedModels.length === 0 && (
+              <div className="text-xs text-slate-500 space-y-2">
+                <p>一致するモデルがありません。検索条件をクリアするか、手動入力をお試しください。</p>
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => { setModelQuery(''); modelSearchInputRef.current?.focus(); }} className="text-orange-600 hover:underline">検索をクリア</button>
+                  <button type="button" onClick={() => setSelectedModelId('__custom__')} className="text-orange-600 hover:underline">手動入力を選択</button>
+                </div>
+              </div>
+            )}
+
+            {selectedModelId === '__custom__' && (
+              <input
+                type="text"
+                placeholder="例: gpt-4o-mini, claude-3-5-sonnet, llama-3"
+                value={customModelInput}
+                onChange={(e) => setCustomModelInput(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono"
+              />
+            )}
             <p className="text-xs text-slate-500">
-              {cachedModels.length > 0
-                ? `${cachedModels.length}件の取得済みモデルから選択中`
-                : 'モデル一覧は「API設定」画面で取得・更新できます'}
+              {cachedModels.length > 0 ? `${cachedModels.length}件の取得済みモデルから選択中` : 'モデル一覧は「API設定」画面で取得・更新できます'}
             </p>
           </div>
         </div>
@@ -507,7 +536,7 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
           <button
             id="start-grill-btn"
             type="submit"
-            disabled={submitting}
+            disabled={submitting || modelsLoading}
             className="w-full sm:w-auto px-8 py-3.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-base rounded-xl shadow-lg shadow-orange-600/20 flex items-center justify-center gap-2 transition-transform active:scale-98 cursor-pointer"
           >
             <Flame className="w-5 h-5" />
