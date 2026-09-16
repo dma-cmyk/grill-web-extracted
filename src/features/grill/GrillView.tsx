@@ -410,7 +410,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
           round: data.round || currentSession.currentRound,
           grillRound: data,
           ...(currentSession.pendingFollowUpTheme
-            ? { followUpTheme: currentSession.pendingFollowUpTheme, handoffSnapshot: currentSession.finalHandoff }
+            ? { followUpTheme: currentSession.pendingFollowUpTheme }
             : {}),
         },
       ];
@@ -808,6 +808,11 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
       await updateSession((curr) => ({ ...curr, status: 'parsing', lastRawResponse: fullOutput }));
       if (activeRequestIdRef.current !== reqId) return;
       await handleReceivedResponse(fullOutput, snapshot.baseSession, reqId, snapshot.isRepairAttempt);
+      if (activeRequestIdRef.current !== reqId) return;
+      if (snapshot.requestSession.pendingFollowUpTheme !== undefined) {
+        setFollowUpOpen(false);
+        setFollowUpTheme('');
+      }
     } catch (err: unknown) {
       if (activeRequestIdRef.current !== reqId) return;
       await handleLlmError(err);

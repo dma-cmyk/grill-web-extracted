@@ -41,7 +41,7 @@ export class MockLlmProvider implements ILlmProvider {
     const isFollowUpRequest = lastUserMessage.includes('の追加検討');
     const hasFollowUpRequest = messages.some((m) => m.role === 'user' && m.content.includes('の追加検討'));
     const isFollowUpAnswer = hasFollowUpRequest && lastUserMessage.includes('への回答');
-    const followUpMatch = messages.map((m) => m.content.match(/【Round (\d+) の追加検討】/)).find((match) => match);
+    const followUpMatch = [...messages].reverse().map((m) => m.content.match(/【Round (\d+) の追加検討】/)).find((match) => match);
     const followUpRound = followUpMatch ? Number(followUpMatch[1]) : currentRoundNumber;
 
     let responseObj: any;
@@ -69,7 +69,7 @@ export class MockLlmProvider implements ILlmProvider {
         conflicts: [],
         openIssues: ['追加検討後の運用メトリクスを継続的に見直す'],
         questions: [],
-        finalHandoff: shortHandoff ? '' : '# 追加ラウンド完了 Handoff\n\n追加検討の回答を反映した最新の実装方針です。',
+        finalHandoff: shortHandoff ? '' : '# 追加ラウンド完了 Handoff\n\n追加検討の回答を反映した最新の実装方針です。運用時の観測性、段階的な検証条件、既存の決定事項と未解決事項を統合した今回の追加ラウンド固有の引き継ぎ内容です。',
       };
     } else if (!isLastRound) {
       // Round 1
