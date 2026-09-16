@@ -9,6 +9,7 @@ import {
   Trash2,
   Play,
   FileText,
+  Flame,
   Clock,
   Cpu,
   CheckCircle2,
@@ -167,14 +168,25 @@ export const SessionsView: React.FC<SessionsViewProps> = ({ onNavigate }) => {
 
                 <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
                   {isCompleted ? (
-                    <button
-                      onClick={() => onNavigate({ route: 'handoff', sessionId: s.id })}
-                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span>Handoff</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                    <>
+                      <button
+                        onClick={() => onNavigate({ route: 'handoff', sessionId: s.id })}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span>Handoff</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => onNavigate({ route: 'grill', sessionId: s.id, followUp: true })}
+                        title="追加ラウンドを続ける"
+                        className="px-3.5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                      >
+                        <Flame className="w-4 h-4" />
+                        <span>追加ラウンド</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </>
                   ) : (
                     <button
                       onClick={() => onNavigate({ route: 'grill', sessionId: s.id })}

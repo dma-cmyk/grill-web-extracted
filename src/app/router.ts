@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 
 export type RoutePath =
   | { route: 'start' }
-  | { route: 'grill'; sessionId: string }
+  | { route: 'grill'; sessionId: string; followUp?: boolean }
   | { route: 'sessions' }
   | { route: 'handoff'; sessionId: string }
   | { route: 'settings-apis' }
@@ -16,7 +16,11 @@ export function parseHash(hash: string): RoutePath {
     return { route: 'start' };
   }
   if (parts[0] === 'grill' && parts[1]) {
-    return { route: 'grill', sessionId: parts[1] };
+    return {
+      route: 'grill',
+      sessionId: parts[1],
+      followUp: parts[2] === 'follow-up' ? true : undefined,
+    };
   }
   if (parts[0] === 'sessions') {
     return { route: 'sessions' };
@@ -39,7 +43,9 @@ export function toHash(path: RoutePath): string {
     case 'start':
       return '#/';
     case 'grill':
-      return `#/grill/${path.sessionId}`;
+      return path.followUp
+        ? `#/grill/${path.sessionId}/follow-up`
+        : `#/grill/${path.sessionId}`;
     case 'sessions':
       return '#/sessions';
     case 'handoff':
