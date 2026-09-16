@@ -81,3 +81,20 @@ ${answerLines.join('\n\n')}
 
 上記回答を反映し、確定事項(decisions)や未解決事項(openIssues)を更新した上で、次のRoundの質問または完了(finished: true)の判定を行い、指定のJSONで出力してください。`;
 }
+
+/**
+ * Builds a user message for an additional round, using the current unresolved issues.
+ */
+export function buildFollowUpMessage(round: number, followUpTheme: string | undefined, openIssues: string[]): string {
+  const theme = followUpTheme?.trim() || '(指定なし。未解決事項の深掘りを優先)';
+  const issues = openIssues.length ? openIssues.map((issue) => `- ${issue}`).join('\n') : '- (未解決事項なし)';
+
+  return `【Round ${round} の追加検討】
+## 追加で検討したいテーマ
+${theme}
+
+## 現在の未解決事項
+${issues}
+
+これまでの決定事項(decisions)、前提(assumptions)、矛盾(conflicts)、未解決事項(openIssues)を引き継いだうえで、次のRoundの質問または完了(finished: true)の判定を行い、指定のJSONで出力してください。完了する場合は、最新内容で finalHandoff を再生成してください。`;
+}

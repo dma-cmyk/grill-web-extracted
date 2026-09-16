@@ -10,7 +10,7 @@ import { attachmentRepo } from '../../storage/attachmentRepo';
 import { formatBytes } from '../../core/attachmentValidation';
 import { inMemoryKeyStore } from '../../security/inMemoryKeyStore';
 import { getProviderForProfile } from '../../providers';
-import { buildInitialMessages, buildAnswersMessage } from '../../core/promptBuilder';
+import { buildInitialMessages, buildAnswersMessage, buildFollowUpMessage } from '../../core/promptBuilder';
 import { parseAndValidateGrillRound, buildRepairMessage } from '../../core/responseParser';
 import { generateAgentHandoffPrompt } from '../../core/handoffGenerator';
 import { maskResponseText, maskStreamingText } from '../../security/masking';
@@ -35,6 +35,7 @@ import {
 interface GrillViewProps {
   sessionId: string;
   onNavigate: (route: RoutePath) => void;
+  autoOpenFollowUp?: boolean;
 }
 
 function readBlobAsDataUrl(blob: Blob): Promise<string> {
@@ -62,7 +63,7 @@ interface AttachmentDisplayItem {
   previewError?: string;
 }
 
-export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) => {
+export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, autoOpenFollowUp }) => {
   const [session, setSession] = useState<SessionRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [streamingText, setStreamingText] = useState<string>('');
@@ -74,6 +75,9 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
   const [displayAttachments, setDisplayAttachments] = useState<AttachmentDisplayItem[]>([]);
   const [attachmentsLoading, setAttachmentsLoading] = useState(true);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpTheme, setFollowUpTheme] = useState('');
+  const followUpInFlightRef = useRef(false);
   const sessionRef = useRef<SessionRecord | null>(null);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
@@ -219,6 +223,18 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       activeRequestIdRef.current = null;
     };
   }, [sessionId]);
+  // Opens the follow-up composer only when arriving via the /follow-up hash.
+  // One-shot per session so a closed composer is never reopened by later
+  // state updates, but reset when sessionId changes so a follow-up hash on a
+  // different session opens it again. Never submits.
+  const autoOpenHandledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (autoOpenFollowUp && session?.status === 'completed') {
+      if (autoOpenHandledRef.current === sessionId) return;
+      autoOpenHandledRef.current = sessionId;
+      setFollowUpOpen(true);
+    }
+  }, [session, autoOpenFollowUp, sessionId]);
 
   // Update session state in memory and persist in IndexedDB
   const updateSession = async (updater: (prev: SessionRecord) => SessionRecord) => {
@@ -257,11 +273,21 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
 
     const effectiveKey = profile.apiKey || inMemoryKeyStore.get(profile.id);
     const secrets = [effectiveKey, profile.apiKey, ...(profile.headers || []).map((header) => header.value), ...(inMemoryKeyStore.getHeaders(profile.id) || []).map((header) => header.value)];
+    if (activeRequestIdRef.current !== requestId) {
+      throw new DOMException('Aborted by user', 'AbortError');
+    }
     const provider = getProviderForProfile(profile);
 
+    if (activeRequestIdRef.current !== requestId) {
+      throw new DOMException('Aborted by user', 'AbortError');
+    }
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    if (activeRequestIdRef.current !== requestId) {
+      controller.abort();
+      throw new DOMException('Aborted by user', 'AbortError');
+    }
     const output = await provider.chat({
       profile,
       apiKey: effectiveKey,
@@ -383,6 +409,9 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
         {
           round: data.round || currentSession.currentRound,
           grillRound: data,
+          ...(currentSession.pendingFollowUpTheme
+            ? { followUpTheme: currentSession.pendingFollowUpTheme, handoffSnapshot: currentSession.finalHandoff }
+            : {}),
         },
       ];
 
@@ -419,10 +448,16 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
 
       if (isFinished) {
         if (!finalHandoffText || finalHandoffText.length < 50) {
-          finalHandoffText = generateAgentHandoffPrompt(nextSession);
+          finalHandoffText = generateAgentHandoffPrompt({ ...nextSession, finalHandoff: undefined });
         }
         nextSession.finalHandoff = finalHandoffText;
       }
+      if (nextSession.pendingFollowUpTheme !== undefined) {
+        nextSession.pendingFollowUpTheme = undefined;
+      }
+
+      // Guard against a stale response reaching the first persistence await.
+      if (activeRequestIdRef.current !== reqId) return;
 
       await updateSession(() => nextSession);
       if (activeRequestIdRef.current !== reqId) return;
@@ -444,6 +479,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       if (!isRepairAttempt && parseResult.canRepair) {
         // Attempt single-shot repair as specified in Section 3.5
         console.warn('JSON parsing or validation failed, initiating single-shot repair...');
+        if (activeRequestIdRef.current !== reqId) return;
         await attemptRepair(rawText, parseResult.error || 'JSON形式の不一致', currentSession, reqId);
       } else {
         // Repair failed or not applicable
@@ -488,16 +524,21 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       status: 'receiving' as GrillStatus,
       pendingRepair: true,
     };
+    // Retry snapshot must be fixed before the first persistence await so a
+    // retry never re-appends the repair message.
+    lastRequestRef.current = {
+      requestSession: sessionWithRepair,
+      baseSession: sessionWithRepair,
+      isRepairAttempt: true,
+    };
+    // Guard against a stale request reaching the first persistence await.
+    if (activeRequestIdRef.current !== reqId) return;
+
     await updateSession(() => sessionWithRepair);
     if (activeRequestIdRef.current !== reqId) return;
     setStreamingText('修復リクエストを実行中...');
 
     try {
-      lastRequestRef.current = {
-        requestSession: sessionWithRepair,
-        baseSession: sessionWithRepair,
-        isRepairAttempt: true,
-      };
       const repairedOutput = await executeLlmCall(sessionWithRepair, reqId, (_chunk, accumulated) => {
         setStreamingText(accumulated);
       });
@@ -583,6 +624,17 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       pendingRepair: undefined,
     };
 
+    // Retry snapshot must be fixed before the first persistence await so a
+    // retry never re-appends the answer message.
+    lastRequestRef.current = {
+      requestSession: sessionAfterAnswer,
+      baseSession: sessionAfterAnswer,
+      isRepairAttempt: false,
+    };
+
+    // Guard against a stale request reaching the first persistence await.
+    if (activeRequestIdRef.current !== reqId) return;
+
     await updateSession(() => sessionAfterAnswer);
     if (activeRequestIdRef.current !== reqId) return;
     setStreamingText('');
@@ -591,11 +643,6 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
       await updateSession((curr) => ({ ...curr, status: 'receiving' }));
       if (activeRequestIdRef.current !== reqId) return;
 
-      lastRequestRef.current = {
-        requestSession: sessionAfterAnswer,
-        baseSession: sessionAfterAnswer,
-        isRepairAttempt: false,
-      };
       const fullOutput = await executeLlmCall(sessionAfterAnswer, reqId, (_chunk, accumulated) => {
         setStreamingText(accumulated);
       });
@@ -609,6 +656,90 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
     } catch (err: any) {
       if (activeRequestIdRef.current !== reqId) return;
       await handleLlmError(err);
+    }
+  };
+
+  /**
+   * Starts an additional round on the same session from the completed banner.
+   * Builds the follow-up request synchronously, fixes the retry snapshot
+   * before the first persistence await, and mirrors the existing
+   * request-id / abort / save-queue / stale-guard pattern exactly.
+   */
+  const startFollowUpRound = async () => {
+    const current = sessionRef.current;
+    if (!current || current.status !== 'completed' || followUpInFlightRef.current) return;
+    followUpInFlightRef.current = true;
+
+    const reqId = 'req-' + Date.now();
+    activeRequestIdRef.current = reqId;
+
+    try {
+      const theme = followUpTheme.trim();
+      // Build the follow-up request synchronously against the existing
+      // messages so attachments / prior context are carried without any
+      // re-read of attachmentRepo or message rebuild.
+      const followUpContent = buildFollowUpMessage(
+        current.currentRound + 1,
+        theme || undefined,
+        current.openIssues
+      );
+
+      const requestSession: SessionRecord = {
+        ...current,
+        status: 'requesting',
+        rounds: current.rounds.map((round, index) =>
+          index === current.rounds.length - 1
+            ? { ...round, handoffSnapshot: current.finalHandoff }
+            : round
+        ),
+        messages: [
+          ...current.messages,
+          {
+            role: 'user',
+            content: followUpContent,
+            timestamp: Date.now(),
+          },
+        ],
+        pendingRepair: undefined,
+        pendingFollowUpTheme: theme || undefined,
+        currentRound: current.currentRound + 1,
+      };
+
+      // Retry snapshot must be fixed before the first persistence await so a
+      // retry resends the follow-up request without re-appending its message.
+      lastRequestRef.current = {
+        requestSession,
+        baseSession: requestSession,
+        isRepairAttempt: false,
+      };
+
+      await updateSession(() => requestSession);
+      if (activeRequestIdRef.current !== reqId) return;
+      setStreamingText('');
+
+      await updateSession((curr) => ({ ...curr, status: 'receiving' }));
+      if (activeRequestIdRef.current !== reqId) return;
+
+      const fullOutput = await executeLlmCall(requestSession, reqId, (_chunk, accumulated) => {
+        setStreamingText(accumulated);
+      });
+
+      if (activeRequestIdRef.current !== reqId) return;
+
+      await updateSession((curr) => ({ ...curr, status: 'parsing', lastRawResponse: fullOutput }));
+      if (activeRequestIdRef.current !== reqId) return;
+
+      await handleReceivedResponse(fullOutput, requestSession, reqId, false);
+      if (activeRequestIdRef.current !== reqId) return;
+
+      // Close the composer and clear the theme only on success.
+      setFollowUpOpen(false);
+      setFollowUpTheme('');
+    } catch (err: unknown) {
+      if (activeRequestIdRef.current !== reqId) return;
+      await handleLlmError(err);
+    } finally {
+      followUpInFlightRef.current = false;
     }
   };
 
@@ -911,6 +1042,15 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
             </div>
 
             <div className="flex items-center gap-2">
+              {!followUpOpen && (
+                <button
+                  onClick={() => setFollowUpOpen(true)}
+                  className="px-3 py-2 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <Flame className="w-4 h-4 text-orange-500" />
+                  <span>続けて検討する</span>
+                </button>
+              )}
               <button
                 onClick={handleCopyHandoff}
                 className="px-3 py-2 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer"
@@ -927,6 +1067,38 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
               </button>
             </div>
           </div>
+
+          {followUpOpen && (
+            <div className="border-t border-emerald-200/70 pt-4 space-y-3">
+              <p className="text-xs text-emerald-800 leading-relaxed">
+                未解決事項がある場合は、そのまま続けて検討できます。追加で検討したいテーマがあれば任意で入力してください。未入力でも未解決事項の深掘りを優先して続行します。
+              </p>
+              <textarea
+                value={followUpTheme}
+                onChange={(e) => setFollowUpTheme(e.target.value)}
+                placeholder="追加で検討したいテーマ（任意。例: 運用時の監視方針を詰めたい）"
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-orange-500/30"
+              />
+              <div className="flex items-center gap-3 justify-end">
+                <button
+                  onClick={() => setFollowUpOpen(false)}
+                  className="px-3 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg text-xs font-semibold cursor-pointer"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={startFollowUpRound}
+                  disabled={isCommunicating}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Flame className="w-4 h-4" />
+                  <span>追加ラウンドを開始</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1127,6 +1299,24 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate }) =
                         <span>Round {r.round}</span>
                         <span className="text-slate-400">進捗: {r.grillRound.completion?.progressPercentage || 0}%</span>
                       </div>
+                      {(r.followUpTheme || r.handoffSnapshot) && (
+                        <div className="border border-orange-200 bg-orange-50/50 rounded-lg p-2.5 space-y-1.5 max-h-40 overflow-y-auto">
+                          {r.followUpTheme && (
+                            <p className="text-xs">
+                              <span className="font-bold text-orange-900">追加テーマ: </span>
+                              <span className="text-orange-900">{r.followUpTheme}</span>
+                            </p>
+                          )}
+                          {r.handoffSnapshot && (
+                            <div className="text-xs">
+                              <span className="font-bold text-emerald-800">当時のHandoff: </span>
+                              <pre className="whitespace-pre-wrap break-words font-sans text-slate-700 mt-1 leading-relaxed">
+                                {r.handoffSnapshot}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <div className="space-y-1.5">
                         {r.grillRound.questions.map((q, qIdx) => {
                           const userAns = r.answers?.[qIdx];

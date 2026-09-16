@@ -37,10 +37,41 @@ export class MockLlmProvider implements ILlmProvider {
 
     const currentRoundNumber = userAnswersCount + 1;
     const isLastRound = currentRoundNumber >= 2;
+    const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+    const isFollowUpRequest = lastUserMessage.includes('の追加検討');
+    const hasFollowUpRequest = messages.some((m) => m.role === 'user' && m.content.includes('の追加検討'));
+    const isFollowUpAnswer = hasFollowUpRequest && lastUserMessage.includes('への回答');
+    const followUpMatch = messages.map((m) => m.content.match(/【Round (\d+) の追加検討】/)).find((match) => match);
+    const followUpRound = followUpMatch ? Number(followUpMatch[1]) : currentRoundNumber;
 
     let responseObj: any;
 
-    if (!isLastRound) {
+    if (isFollowUpRequest) {
+      responseObj = {
+        round: followUpRound,
+        finished: false,
+        completion: { progressPercentage: 72, reasoning: '追加テーマと既存の未解決事項を照合し、実装上の判断を深掘り中' },
+        decisions: ['追加ラウンドで運用時の観測性と段階的な導入方針を優先する'],
+        assumptions: ['既存のセッション文脈と未解決事項を追加検討へ引き継ぐ'],
+        conflicts: ['短期の実装速度と長期の運用柔軟性のバランス'],
+        openIssues: ['追加検討した設計の検証方法と導入順序'],
+        questions: [{ id: 'followup-q1', category: '追加検討', question: '追加検討の内容を最初に検証する対象と成功条件は何ですか？', options: ['小規模の試験導入で確認する', '本番相当環境で一括検証する'], recommendedAnswer: '小規模の試験導入で確認する', explanation: '影響範囲を抑えながら実測結果を得られます。' }],
+        finalHandoff: '',
+      };
+    } else if (isFollowUpAnswer) {
+      const shortHandoff = messages.some((m) => m.role === 'user' && m.content.includes('__short-handoff__'));
+      responseObj = {
+        round: followUpRound,
+        finished: true,
+        completion: { progressPercentage: 100, reasoning: '追加検討の回答を反映し、最新の方針が確定しました' },
+        decisions: ['追加検討の回答を反映し、段階的な検証と観測性を実装方針として確定する'],
+        assumptions: ['追加ラウンドで合意した検証条件を次の実装計画へ引き継ぐ'],
+        conflicts: [],
+        openIssues: ['追加検討後の運用メトリクスを継続的に見直す'],
+        questions: [],
+        finalHandoff: shortHandoff ? '' : '# 追加ラウンド完了 Handoff\n\n追加検討の回答を反映した最新の実装方針です。',
+      };
+    } else if (!isLastRound) {
       // Round 1
       responseObj = {
         round: 1,

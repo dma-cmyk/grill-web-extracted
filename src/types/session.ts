@@ -42,6 +42,8 @@ export interface RoundHistoryEntry {
   round: number;
   grillRound: GrillRound;
   answers?: QuestionAnswer[];
+  followUpTheme?: string;
+  handoffSnapshot?: string;
   submittedAt?: number;
 }
 
@@ -64,6 +66,7 @@ export interface SessionRecord {
   lastError?: string;
   lastRawResponse?: string;
   pendingRepair?: boolean;
+  pendingFollowUpTheme?: string;
   createdAt: number;
   updatedAt: number;
 }

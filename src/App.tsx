@@ -90,7 +90,7 @@ export default function App() {
       <main className="flex-1 pb-16">
         {currentRoute.route === 'start' && <StartView onNavigate={navigate} />}
         {currentRoute.route === 'grill' && (
-          <GrillView sessionId={currentRoute.sessionId} onNavigate={navigate} />
+          <GrillView sessionId={currentRoute.sessionId} onNavigate={navigate} autoOpenFollowUp={currentRoute.followUp === true} />
         )}
         {currentRoute.route === 'sessions' && <SessionsView onNavigate={navigate} />}
         {currentRoute.route === 'handoff' && (
