@@ -467,7 +467,25 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
               ))}
             </select>
 
-            {/* In-memory key input if needed */}
+            {needsSessionKey && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1.5">
+                <label className="block text-xs font-semibold text-amber-900" htmlFor="session-api-key-input">
+                  このセッション用のAPIキー (メモリ内保持)
+                </label>
+                <input
+                  id="session-api-key-input"
+                  type="password"
+                  placeholder="sk-..."
+                  value={sessionApiKey}
+                  onChange={(e) => setSessionApiKey(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-amber-300 rounded-lg text-xs font-mono bg-white"
+                />
+                <p className="text-[11px] text-amber-800">
+                  ※ このProfileはブラウザ保存が無効のため、現在のタブメモリでのみ利用されます。
+                </p>
+              </div>
+            )}
+            <label htmlFor="model-search-input" className="sr-only">モデルを検索</label>
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
