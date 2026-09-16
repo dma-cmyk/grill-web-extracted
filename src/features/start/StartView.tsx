@@ -45,9 +45,12 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
   const imageObjectUrls = useRef(new Map<string, string>());
   const modelSearchInputRef = useRef<HTMLInputElement>(null);
   const profileLoadGenerationRef = useRef(0);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [validationErrorField, setValidationErrorField] = useState<string | null>(null);
+  const [validationErrorCount, setValidationErrorCount] = useState(0);
+  const formErrorRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -150,6 +153,10 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
     imageObjectUrls.current.clear();
   }, []);
 
+  useEffect(() => {
+    if (formError) formErrorRef.current?.focus();
+  }, [formError, validationErrorCount]);
+
   const selectedProfile = apiProfiles.find((p) => p.id === selectedProfileId);
   const needsSessionKey =
     selectedProfile &&
@@ -176,37 +183,21 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
   const handleStartGrill = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    setValidationErrorField(null);
 
-    if (modelsLoading) {
-      setFormError('モデル一覧の読み込みが完了するまでお待ちください');
-      return;
-    }
-    if (!theme.trim()) {
-      setFormError('検討したいテーマを入力してください');
-      return;
-    }
-
-    if (!selectedProfile) {
-      setFormError('API Profile を選択してください');
-      return;
-    }
-
-    if (needsSessionKey && !sessionApiKey.trim()) {
-      setFormError('このAPI Profile用のAPIキーを入力してください');
-      return;
-    }
-
+    const fail = (field: string, message: string) => {
+      setFormError(message);
+      setValidationErrorField(field);
+      setValidationErrorCount((count) => count + 1);
+    };
+    if (modelsLoading) { fail('model-select', 'モデル一覧の読み込みが完了するまでお待ちください'); return; }
+    if (!theme.trim()) { fail('theme-input', '検討したいテーマを入力してください'); return; }
+    if (!selectedProfile) { fail('api-profile-select', 'API Profile を選択してください'); return; }
+    if (needsSessionKey && !sessionApiKey.trim()) { fail('session-api-key-input', 'このAPI Profile用のAPIキーを入力してください'); return; }
     const effectiveModel = selectedModelId === '__custom__' ? customModelInput.trim() : selectedModelId;
-    if (!effectiveModel) {
-      setFormError('モデルを選択または入力してください');
-      return;
-    }
-
+    if (!effectiveModel) { fail('manual-model-input', 'モデルを選択または入力してください'); return; }
     const promptProfile = promptProfiles.find((p) => p.id === selectedPromptId) || promptProfiles[0];
-    if (!promptProfile) {
-      setFormError('Prompt Profile を選択してください');
-      return;
-    }
+    if (!promptProfile) { fail('prompt-profile-select', 'Prompt Profileを選択してください'); return; }
 
     // Save in-memory key if provided
     if (sessionApiKey.trim()) {
@@ -303,6 +294,8 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
             required
             value={theme}
             onChange={(e) => setTheme(e.target.value)}
+            aria-describedby={validationErrorField === 'theme-input' ? 'start-form-error' : undefined}
+            aria-invalid={validationErrorField === 'theme-input'}
             placeholder="例: 「社内用のFAQボットを作りたいが、APIキー管理とセキュリティの要件、およびMVPとしての最小スコープを明確にしたい」"
             className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 leading-relaxed"
           />
@@ -356,168 +349,58 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Depth selection */}
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-            <label className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <div id="depth-group-label" className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Sliders className="w-4 h-4 text-orange-500" />
               2. ヒアリング深度 (Depth)
-            </label>
-
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setDepth('quick')}
-                className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
-                  depth === 'quick'
-                    ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div className="text-sm">Quick</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">1〜2回</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDepth('standard')}
-                className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
-                  depth === 'standard'
-                    ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div className="text-sm">Standard</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">2〜3回 (推奨)</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDepth('deep')}
-                className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
-                  depth === 'deep'
-                    ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div className="text-sm">Deep</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">4〜6回</div>
-              </button>
             </div>
-            <p className="text-xs text-slate-500">
-              ラウンド数を目安とし、AIが十分に仕様が固まったと判断した時点で自動完了します。
-            </p>
+            <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="depth-group-label">
+              <button type="button" aria-pressed={depth === 'quick'} onClick={() => setDepth('quick')} className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${depth === 'quick' ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}><div className="text-sm">Quick</div><div className="text-[11px] text-slate-500 mt-0.5">1〜2回</div></button>
+              <button type="button" aria-pressed={depth === 'standard'} onClick={() => setDepth('standard')} className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${depth === 'standard' ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}><div className="text-sm">Standard</div><div className="text-[11px] text-slate-500 mt-0.5">2〜3回 (推奨)</div></button>
+              <button type="button" aria-pressed={depth === 'deep'} onClick={() => setDepth('deep')} className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${depth === 'deep' ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}><div className="text-sm">Deep</div><div className="text-[11px] text-slate-500 mt-0.5">4〜6回</div></button>
+            </div>
+            <p className="text-xs text-slate-500">ラウンド数を目安とし、AIが十分に仕様が固まったと判断した時点で自動完了します。</p>
           </div>
 
           {/* Prompt profile selection */}
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-orange-500" />
-                3. Prompt Profile
-              </label>
-              <button
-                type="button"
-                onClick={() => onNavigate({ route: 'settings-prompts' })}
-                className="text-xs text-orange-600 hover:underline font-medium"
-              >
-                編集・追加
-              </button>
+              <label htmlFor="prompt-profile-select" className="text-sm font-bold text-slate-900 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-orange-500" />3. Prompt Profile *</label>
+              <button type="button" onClick={() => onNavigate({ route: 'settings-prompts' })} className="text-xs text-orange-600 hover:underline font-medium">編集・追加</button>
             </div>
-
-            <select
-              value={selectedPromptId}
-              onChange={(e) => setSelectedPromptId(e.target.value)}
-              className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30"
-            >
-              {promptProfiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} {p.builtIn ? '(組み込み)' : '(カスタム)'}
-                </option>
-              ))}
+            <p id="prompt-profile-help" className="text-xs text-slate-500">Prompt ProfileはGrillの質問・出力方針を決めます。{promptProfiles.find((p) => p.id === selectedPromptId)?.description}</p>
+            <select id="prompt-profile-select" value={selectedPromptId} onChange={(e) => setSelectedPromptId(e.target.value)} aria-required="true" aria-describedby={validationErrorField === 'prompt-profile-select' ? 'start-form-error' : 'prompt-profile-help'} aria-invalid={validationErrorField === 'prompt-profile-select'} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30">
+              {promptProfiles.map((p) => <option key={p.id} value={p.id}>{p.name} {p.builtIn ? '(組み込み)' : '(カスタム)'}</option>)}
             </select>
-
-            <p className="text-xs text-slate-500 line-clamp-2">
-              {promptProfiles.find((p) => p.id === selectedPromptId)?.description}
-            </p>
           </div>
-
-          {/* API profile selection */}
+          {/* API profile + model selection */}
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Key className="w-4 h-4 text-orange-500" />
-                4. API Profile
-              </label>
-              <button
-                type="button"
-                onClick={() => onNavigate({ route: 'settings-apis' })}
-                className="text-xs text-orange-600 hover:underline font-medium"
-              >
-                管理・追加
-              </button>
+              <label htmlFor="api-profile-select" className="text-sm font-bold text-slate-900 flex items-center gap-2"><Key className="w-4 h-4 text-orange-500" />4. API Profile *</label>
+              <button type="button" onClick={() => onNavigate({ route: 'settings-apis' })} className="text-xs text-orange-600 hover:underline font-medium">管理・追加</button>
             </div>
-
-            <select
-              value={selectedProfileId}
-              onChange={(e) => handleProfileChange(e.target.value)}
-              className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30"
-            >
-              {apiProfiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.id === MOCK_API_PROFILE.id ? '内蔵モック' : p.baseUrl})
-                </option>
-              ))}
+            <p id="api-profile-help" className="text-xs text-slate-500">API Profileが利用可能なモデルを決めます。</p>
+            <select id="api-profile-select" value={selectedProfileId} onChange={(e) => handleProfileChange(e.target.value)} aria-required="true" aria-describedby={validationErrorField === 'api-profile-select' ? 'start-form-error' : 'api-profile-help'} aria-invalid={validationErrorField === 'api-profile-select'} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30">
+              {apiProfiles.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.id === MOCK_API_PROFILE.id ? '内蔵モック' : p.baseUrl})</option>)}
             </select>
-
             {needsSessionKey && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1.5">
-                <label className="block text-xs font-semibold text-amber-900" htmlFor="session-api-key-input">
-                  このセッション用のAPIキー (メモリ内保持)
-                </label>
-                <input
-                  id="session-api-key-input"
-                  type="password"
-                  placeholder="sk-..."
-                  value={sessionApiKey}
-                  onChange={(e) => setSessionApiKey(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-amber-300 rounded-lg text-xs font-mono bg-white"
-                />
-                <p className="text-[11px] text-amber-800">
-                  ※ このProfileはブラウザ保存が無効のため、現在のタブメモリでのみ利用されます。
-                </p>
+                <label className="block text-xs font-semibold text-amber-900" htmlFor="session-api-key-input">このセッション用のAPIキー (メモリ内保持)</label>
+                <input id="session-api-key-input" type="password" aria-required="true" aria-describedby={validationErrorField === 'session-api-key-input' ? 'start-form-error' : undefined} aria-invalid={validationErrorField === 'session-api-key-input'} placeholder="sk-..." value={sessionApiKey} onChange={(e) => setSessionApiKey(e.target.value)} className="w-full px-3 py-1.5 border border-amber-300 rounded-lg text-xs font-mono bg-white" />
+                <p className="text-[11px] text-amber-800">※ このProfileはブラウザ保存が無効のため、現在のタブメモリでのみ利用されます。</p>
               </div>
             )}
             <label htmlFor="model-search-input" className="sr-only">モデルを検索</label>
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-              <input
-                ref={modelSearchInputRef}
-                id="model-search-input"
-                type="search"
-                placeholder="モデル名またはIDで検索..."
-                value={modelQuery}
-                onChange={(e) => setModelQuery(e.target.value)}
-                aria-describedby="model-search-status"
-                className="w-full pl-10 pr-20 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
-              />
-              {modelQuery && (
-                <button type="button" onClick={() => { setModelQuery(''); modelSearchInputRef.current?.focus(); }} className="absolute right-3 top-2.5 text-xs text-orange-600 hover:underline">クリア</button>
-              )}
+              <input ref={modelSearchInputRef} id="model-search-input" type="search" placeholder="モデル名またはIDで検索..." value={modelQuery} onChange={(e) => setModelQuery(e.target.value)} aria-describedby="model-search-status" className="w-full pl-10 pr-20 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500" />
+              {modelQuery && <button type="button" onClick={() => { setModelQuery(''); modelSearchInputRef.current?.focus(); }} className="absolute right-3 top-2.5 text-xs text-orange-600 hover:underline">クリア</button>}
             </div>
-            <select
-              id="model-select"
-              value={selectedModelId}
-              onChange={(e) => setSelectedModelId(e.target.value)}
-              aria-describedby="model-search-status"
-              className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30"
-            >
-              {visibleModels.map((m, index) => (
-                <option key={`${m.modelId}-${index}`} value={m.modelId}>{m.displayName}</option>
-              ))}
+            <label htmlFor="model-select" className="sr-only">使用モデルを選択</label>
+            <select id="model-select" value={selectedModelId} onChange={(e) => setSelectedModelId(e.target.value)} aria-required="true" aria-describedby={validationErrorField === 'model-select' ? 'start-form-error' : 'model-search-status'} aria-invalid={validationErrorField === 'model-select'} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30">
+              {visibleModels.map((m, index) => <option key={`${m.modelId}-${index}`} value={m.modelId}>{m.displayName}</option>)}
               <option value="__custom__">-- 手動入力 (直接指定) --</option>
             </select>
-
-            <p id="model-search-status" role="status" aria-live="polite" className="text-xs text-slate-500">
-              {modelsLoading ? 'モデル一覧を読み込み中...' : `${filteredCachedModels.length}件のモデルが見つかりました`}
-            </p>
+            <p id="model-search-status" role="status" aria-live="polite" className="text-xs text-slate-500">{modelsLoading ? 'モデル一覧を読み込み中...' : `${filteredCachedModels.length}件のモデルが見つかりました`}</p>
             {!modelsLoading && normalizedModelQuery && filteredCachedModels.length === 0 && (
               <div className="text-xs text-slate-500 space-y-2">
                 <p>一致するモデルがありません。検索条件をクリアするか、手動入力をお試しください。</p>
@@ -527,26 +410,18 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
                 </div>
               </div>
             )}
-
             {selectedModelId === '__custom__' && (
-              <input
-                type="text"
-                placeholder="例: gpt-4o-mini, claude-3-5-sonnet, llama-3"
-                value={customModelInput}
-                onChange={(e) => setCustomModelInput(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono"
-              />
+              <div>
+                <label htmlFor="manual-model-input" className="sr-only">手動モデル入力</label>
+                <input id="manual-model-input" type="text" aria-required="true" aria-describedby={validationErrorField === 'manual-model-input' ? 'start-form-error' : undefined} aria-invalid={validationErrorField === 'manual-model-input'} placeholder="例: gpt-4o-mini, claude-3-5-sonnet, llama-3" value={customModelInput} onChange={(e) => setCustomModelInput(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono" />
+              </div>
             )}
-            <p className="text-xs text-slate-500">
-              {cachedModels.length > 0 ? `${cachedModels.length}件の取得済みモデルから選択中` : 'モデル一覧は「API設定」画面で取得・更新できます'}
-            </p>
+            <p className="text-xs text-slate-500">{cachedModels.length > 0 ? `${cachedModels.length}件の取得済みモデルから選択中` : 'モデル一覧は「API設定」画面で取得・更新できます'}</p>
           </div>
         </div>
 
         {formError && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium">
-            {formError}
-          </div>
+          <div id="start-form-error" ref={formErrorRef} role="alert" tabIndex={-1} className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium">{formError}</div>
         )}
 
         {/* Start button */}
