@@ -64,13 +64,16 @@ interface AttachmentDisplayItem {
 }
 
 export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, autoOpenFollowUp }) => {
+  const [notFound, setNotFound] = useState(false);
   const [session, setSession] = useState<SessionRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [emptyAnswerError, setEmptyAnswerError] = useState(false);
   const [streamingText, setStreamingText] = useState<string>('');
   const [currentAnswers, setCurrentAnswers] = useState<Record<string, QuestionAnswer>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [rawModalOpen, setRawModalOpen] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [displayAttachments, setDisplayAttachments] = useState<AttachmentDisplayItem[]>([]);
   const [attachmentsLoading, setAttachmentsLoading] = useState(true);
@@ -190,13 +193,14 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
     setAttachmentsLoading(true);
     setAttachmentError(null);
     setLoading(true);
+    setNotFound(false);
 
     const s = await sessionRepo.getById(sessionId);
     if (!isCurrentAttachmentLoad(generation)) return;
     if (!s) {
       setAttachmentsLoading(false);
-      alert('セッションが見つかりませんでした');
-      onNavigate({ route: 'sessions' });
+      setLoading(false);
+      setNotFound(true);
       return;
     }
     sessionRef.current = s;
@@ -580,15 +584,15 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
    */
   const handleSubmitAnswers = async () => {
     if (!session || session.status !== 'awaiting_answer') return;
-
     const currentRoundEntry = session.rounds[session.rounds.length - 1];
     if (!currentRoundEntry) return;
 
     const answersList: QuestionAnswer[] = Object.values(currentAnswers);
     if (answersList.length === 0) {
-      alert('回答を1つ以上入力してください');
+      setEmptyAnswerError(true);
       return;
     }
+    setEmptyAnswerError(false);
 
     const reqId = 'req-' + Date.now();
     activeRequestIdRef.current = reqId;
@@ -835,12 +839,29 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
       await resendLastRequest(snapshot);
     }
   };
-  const handleCopyHandoff = () => {
+  const handleCopyHandoff = async () => {
     if (!session?.finalHandoff) return;
-    navigator.clipboard.writeText(session.finalHandoff);
-    setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2500);
+    try {
+      await navigator.clipboard.writeText(session.finalHandoff);
+      setCopySuccess(true);
+      setCopyError(null);
+      setTimeout(() => setCopySuccess(false), 2500);
+    } catch {
+      setCopySuccess(false);
+      setCopyError('クリップボードへのコピーに失敗しました。Handoff画面から手動コピーできます。');
+    }
   };
+
+  if (notFound) {
+    return (
+      <div role="alert" className="text-center py-20 text-slate-600 space-y-4">
+        <p>セッションが見つかりませんでした。</p>
+        <button onClick={() => onNavigate({ route: 'sessions' })} className="px-4 py-2 bg-orange-600 text-white rounded-lg cursor-pointer">
+          セッション一覧へ
+        </button>
+      </div>
+    );
+  }
 
   if (loading || !session) {
     return <div className="text-center py-20 text-slate-400">セッションを読み込み中...</div>;
@@ -1063,6 +1084,18 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
                 <Copy className="w-4 h-4" />
                 <span>{copySuccess ? 'コピー完了！' : 'プロンプトをコピー'}</span>
               </button>
+              {copyError && (
+                <div id="grill-copy-error" role="alert" aria-live="polite" className="flex items-center gap-2 text-xs text-red-700">
+                  <span>{copyError}</span>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate({ route: 'handoff', sessionId: session.id })}
+                    className="underline font-semibold cursor-pointer"
+                  >
+                    Handoff画面を開く
+                  </button>
+                </div>
+              )}
               <button
                 onClick={() => onNavigate({ route: 'handoff', sessionId: session.id })}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer"
@@ -1190,7 +1223,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
                               <button
                                 key={optIdx}
                                 type="button"
-                                onClick={() =>
+                                onClick={() => {
                                   setCurrentAnswers((prev) => ({
                                     ...prev,
                                     [q.id]: {
@@ -1199,8 +1232,9 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
                                       customAnswer: '',
                                       useRecommended: isRecommended,
                                     },
-                                  }))
-                                }
+                                  }));
+                                  setEmptyAnswerError(false);
+                                }}
                                 className={`w-full p-3 rounded-xl border text-left text-xs transition-all flex items-start justify-between gap-3 cursor-pointer ${
                                   isSelected
                                     ? 'bg-orange-50/80 border-orange-500 ring-2 ring-orange-500/20 text-orange-950 font-semibold'
@@ -1249,7 +1283,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
                           type="text"
                           placeholder="例: 上記選択肢に加え、初期はCLIツールとしての提供も考慮する"
                           value={ans.customAnswer || ''}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setCurrentAnswers((prev) => ({
                               ...prev,
                               [q.id]: {
@@ -1257,8 +1291,9 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
                                 customAnswer: e.target.value,
                                 useRecommended: false,
                               },
-                            }))
-                          }
+                            }));
+                            setEmptyAnswerError(false);
+                          }}
                           className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-orange-500/30"
                         />
                       </div>
@@ -1269,8 +1304,12 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
 
               {/* Submit answers action */}
               <div className="pt-4 border-t border-slate-100 flex justify-end">
+                {emptyAnswerError && (
+                  <p id="answer-validation-error" role="alert" className="text-sm text-red-600 mr-auto">回答を1つ以上入力してください</p>
+                )}
                 <button
                   id="submit-answers-btn"
+                  aria-describedby={emptyAnswerError ? 'answer-validation-error' : undefined}
                   onClick={handleSubmitAnswers}
                   className="px-6 py-3 bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm rounded-xl shadow-md shadow-orange-600/20 flex items-center gap-2 cursor-pointer transition-transform active:scale-98"
                 >

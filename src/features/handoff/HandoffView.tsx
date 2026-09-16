@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { RoutePath } from '../../app/router';
 import { SessionRecord } from '../../types/session';
 import { sessionRepo } from '../../storage/sessionRepo';
@@ -6,8 +6,9 @@ import { generateAgentHandoffPrompt } from '../../core/handoffGenerator';
 import {
   FileText,
   Copy,
-  Download,
   CheckCircle2,
+  Download,
+  AlertTriangle,
   ArrowLeft,
   Sparkles,
   Layers,
@@ -19,21 +20,26 @@ interface HandoffViewProps {
   sessionId: string;
   onNavigate: (route: RoutePath) => void;
 }
-
 export const HandoffView: React.FC<HandoffViewProps> = ({ sessionId, onNavigate }) => {
   const [session, setSession] = useState<SessionRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [handoffPrompt, setHandoffPrompt] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'preview' | 'raw'>('preview');
+  const [copyFailed, setCopyFailed] = useState(false);
+  const [copyFailMessage, setCopyFailMessage] = useState<string>('');
+  const [fallbackCounter, setFallbackCounter] = useState(0);
 
+  const handoffFallbackRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     async function load() {
+      setNotFound(false);
       setLoading(true);
       const s = await sessionRepo.getById(sessionId);
       if (!s) {
-        alert('セッションが見つかりません');
-        onNavigate({ route: 'sessions' });
+        setLoading(false);
+        setNotFound(true);
         return;
       }
       setSession(s);
@@ -53,11 +59,22 @@ export const HandoffView: React.FC<HandoffViewProps> = ({ sessionId, onNavigate 
     load();
   }, [sessionId]);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(handoffPrompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(handoffPrompt);
+      setCopied(true);
+      setCopyFailed(false);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setCopyFailed(true);
+      setCopied(false);
+      setCopyFailMessage('クリップボードへのコピーに失敗しました。以下に代替手段が表示されます。');
+      setFallbackCounter((c) => c + 1);
+    }
   };
+  useEffect(() => {
+    if (copyFailed) handoffFallbackRef.current?.focus();
+  }, [copyFailed, fallbackCounter]);
 
   const handleDownload = () => {
     const blob = new Blob([handoffPrompt], { type: 'text/markdown;charset=utf-8' });
@@ -73,6 +90,17 @@ export const HandoffView: React.FC<HandoffViewProps> = ({ sessionId, onNavigate 
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  if (notFound) {
+    return (
+      <div role="alert" className="text-center py-20 text-slate-600 space-y-4">
+        <p>セッションが見つかりませんでした。</p>
+        <button onClick={() => onNavigate({ route: 'sessions' })} className="px-4 py-2 bg-orange-600 text-white rounded-lg cursor-pointer">
+          セッション一覧へ
+        </button>
+      </div>
+    );
+  }
 
   if (loading || !session) {
     return <div className="text-center py-20 text-slate-400">成果物を読み込み中...</div>;
@@ -121,11 +149,18 @@ export const HandoffView: React.FC<HandoffViewProps> = ({ sessionId, onNavigate 
           </button>
         </div>
       </div>
+      {copyFailed && (
+        <div id="handoff-copy-error" role="alert" aria-live="polite" className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800 space-y-2">
+          <div className="flex items-center gap-2"><AlertTriangle className="w-4 h-4" />{copyFailMessage}</div>
+          <label htmlFor="handoff-raw-textarea" className="block text-xs font-semibold">Rawテキスト（手動コピー）</label>
+          <textarea id="handoff-raw-textarea" ref={handoffFallbackRef} value={handoffPrompt} readOnly aria-describedby="handoff-copy-error" rows={6} className="w-full border border-red-300 rounded-lg p-2 text-xs font-mono" />
+        </div>
+      )}
 
       {/* Metadata summary bar */}
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-600">
         <div className="flex items-center gap-4 flex-wrap">
-          <span>テーマ: <strong className="text-slate-900">{session.theme.slice(0, 40)}...</strong></span>
+          <span>テーマ: <strong className="text-slate-900">{session.theme.slice(0, 40)}{session.theme.length > 40 ? '...' : ''}</strong></span>
           <span>総ラウンド: <strong className="text-slate-900">{session.rounds.length}</strong></span>
           <span>確定事項: <strong className="text-emerald-700">{session.decisions.length}件</strong></span>
         </div>
