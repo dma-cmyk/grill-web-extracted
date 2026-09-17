@@ -131,7 +131,7 @@ export const PromptProfilesView: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5 min-w-0">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <FileCode className="w-6 h-6 text-orange-500" />
@@ -198,11 +198,11 @@ export const PromptProfilesView: React.FC = () => {
             <div
               key={p.id}
               id={`prompt-card-${p.id}`}
-              className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col md:flex-row md:items-start justify-between gap-4 hover:border-slate-300 transition-colors"
+              className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col md:flex-row md:items-start justify-between gap-4 hover:border-slate-300 transition-colors min-w-0"
             >
-              <div className="space-y-2 min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-slate-900 text-base">{p.name}</h3>
+              <div className="space-y-2 min-w-0 flex-1 break-words">
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                  <h3 className="font-semibold text-slate-900 text-base break-words min-w-0">{p.name}</h3>
                   {p.builtIn ? (
                     <span className="text-[11px] px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200 font-medium flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3" />
@@ -214,7 +214,7 @@ export const PromptProfilesView: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-600 leading-relaxed">{p.description}</p>
+                <p className="text-xs text-slate-600 leading-relaxed break-words">{p.description}</p>
                 <div className="pt-1">
                   <button
                     onClick={() => setPreviewPrompt(p)}
@@ -225,7 +225,7 @@ export const PromptProfilesView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap w-full md:w-auto">
                 <button
                   onClick={() => handleClone(p.id)}
                   disabled={cloningId === p.id}
@@ -271,14 +271,14 @@ export const PromptProfilesView: React.FC = () => {
           titleId="prompt-delete-title"
           descriptionId="prompt-delete-desc"
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4"
-          panelClassName="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4"
+          panelClassName="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto"
         >
           <h3 id="prompt-delete-title" className="text-lg font-bold text-slate-900">プロンプトの削除確認</h3>
           <p id="prompt-delete-desc" className="text-sm text-slate-600 leading-relaxed">
             このカスタムプロンプトを削除しますか？<br />
             <span className="text-xs text-slate-500">※ このプロンプトを基に作成された過去のセッションデータは削除されません。</span>
           </p>
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3 pt-2 flex-wrap">
             <button
               onClick={() => setDeleteTargetId(null)}
               className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
@@ -302,9 +302,9 @@ export const PromptProfilesView: React.FC = () => {
           titleId="prompt-preview-title"
           descriptionId="prompt-preview-desc"
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto"
-          panelClassName="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8"
+          panelClassName="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8 max-h-[calc(100vh-2rem)] overflow-y-auto"
         >
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 min-w-0 flex-wrap">
             <div>
               <h3 id="prompt-preview-title" className="text-base font-bold text-slate-900">{previewPrompt.name}</h3>
               <p id="prompt-preview-desc" className="text-xs text-slate-500">{previewPrompt.description}</p>
@@ -336,9 +336,9 @@ export const PromptProfilesView: React.FC = () => {
           onClose={() => setEditingPrompt(null)}
           titleId="prompt-edit-title"
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto"
-          panelClassName="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8"
+          panelClassName="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8 max-h-[calc(100vh-2rem)] overflow-y-auto"
         >
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 min-w-0 flex-wrap">
             <h2 id="prompt-edit-title" className="text-lg font-bold text-slate-900">
               {editingPrompt.id ? 'カスタム Prompt の編集' : '新規カスタム Prompt の作成'}
             </h2>
@@ -427,7 +427,7 @@ export const PromptProfilesView: React.FC = () => {
               )}
             </div>
 
-            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 flex-wrap">
               <button
                 type="button"
                 onClick={() => setEditingPrompt(null)}

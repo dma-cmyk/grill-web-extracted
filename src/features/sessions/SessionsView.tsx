@@ -46,7 +46,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({ onNavigate }) => {
 
   return (
     <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5 min-w-0">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <Layers className="w-6 h-6 text-orange-500" />
@@ -118,11 +118,11 @@ export const SessionsView: React.FC<SessionsViewProps> = ({ onNavigate }) => {
               <div
                 key={s.id}
                 id={`session-card-${s.id}`}
-                className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-0"
               >
                 <div className="space-y-2 min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-slate-900 text-base">{s.title}</h3>
+                    <h3 className="font-bold text-slate-900 text-base break-words min-w-0">{s.title}</h3>
                     <span
                       className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold ${
                         isCompleted
@@ -166,7 +166,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({ onNavigate }) => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 flex-wrap w-full md:w-auto">
                   {isCompleted ? (
                     <>
                       <button
@@ -228,14 +228,14 @@ export const SessionsView: React.FC<SessionsViewProps> = ({ onNavigate }) => {
           titleId="session-delete-title"
           descriptionId="session-delete-desc"
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4"
-          panelClassName="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4"
+          panelClassName="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto"
         >
             <h3 id="session-delete-title" className="text-base font-bold text-slate-900">セッションの削除確認</h3>
             <p id="session-delete-desc" className="text-sm text-slate-600 leading-relaxed">
               このGrillセッションとそのヒアリング履歴・確定事項を削除しますか？<br />
               <span className="text-xs text-red-600">※ この操作は取り消せません。</span>
             </p>
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex justify-end gap-3 pt-2 flex-wrap">
               <button
                 onClick={() => setDeleteTargetId(null)}
                 className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"

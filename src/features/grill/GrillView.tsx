@@ -909,7 +909,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
         </div>
 
         {/* Progress bar & Actions */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
           <div className="w-32 sm:w-40 space-y-1">
             <div className="flex justify-between text-[11px] font-semibold text-slate-600">
               <span>進捗度</span>
@@ -1025,7 +1025,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
             </div>
           </div>
 
-          <div className="flex items-center gap-3 pt-1">
+          <div className="flex items-center gap-3 pt-1 flex-wrap">
             <button
               onClick={handleRetry}
               className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 cursor-pointer"
@@ -1067,7 +1067,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {!followUpOpen && (
                 <button
                   onClick={() => setFollowUpOpen(true)}
@@ -1118,7 +1118,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
                 rows={3}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-orange-500/30"
               />
-              <div className="flex items-center gap-3 justify-end">
+              <div className="flex items-center gap-3 justify-end flex-wrap">
                 <button
                   onClick={() => setFollowUpOpen(false)}
                   className="px-3 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg text-xs font-semibold cursor-pointer"
@@ -1303,7 +1303,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
               </div>
 
               {/* Submit answers action */}
-              <div className="pt-4 border-t border-slate-100 flex justify-end">
+              <div className="pt-4 border-t border-slate-100 flex justify-end flex-wrap gap-3">
                 {emptyAnswerError && (
                   <p id="answer-validation-error" role="alert" className="text-sm text-red-600 mr-auto">回答を1つ以上入力してください</p>
                 )}
