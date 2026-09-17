@@ -262,7 +262,7 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 space-y-8">
       <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-700/60 relative overflow-hidden">
-        <div className="relative z-10 max-w-2xl space-y-3">
+        <div className="relative z-10 max-w-full sm:max-w-2xl space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 border border-orange-500/30 text-orange-400 text-xs font-semibold tracking-wide">
             <Flame className="w-3.5 h-3.5" />
             対話型要件具体化ツール
@@ -280,7 +280,7 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
       <form onSubmit={handleStartGrill} className="space-y-6">
         {/* Theme input */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <label htmlFor="theme-input" className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-orange-500" />
               1. 検討したいテーマ・作りたいもの *
@@ -349,11 +349,11 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Depth selection */}
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-            <div id="depth-group-label" className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <div id="depth-group-label" className="text-sm font-bold text-slate-900 flex items-center gap-2 min-w-0 break-words">
               <Sliders className="w-4 h-4 text-orange-500" />
               2. ヒアリング深度 (Depth)
             </div>
-            <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="depth-group-label">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="group" aria-labelledby="depth-group-label">
               <button type="button" aria-pressed={depth === 'quick'} onClick={() => setDepth('quick')} className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${depth === 'quick' ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}><div className="text-sm">Quick</div><div className="text-[11px] text-slate-500 mt-0.5">1〜2回</div></button>
               <button type="button" aria-pressed={depth === 'standard'} onClick={() => setDepth('standard')} className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${depth === 'standard' ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}><div className="text-sm">Standard</div><div className="text-[11px] text-slate-500 mt-0.5">2〜3回 (推奨)</div></button>
               <button type="button" aria-pressed={depth === 'deep'} onClick={() => setDepth('deep')} className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${depth === 'deep' ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}><div className="text-sm">Deep</div><div className="text-[11px] text-slate-500 mt-0.5">4〜6回</div></button>
@@ -363,22 +363,22 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
 
           {/* Prompt profile selection */}
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <label htmlFor="prompt-profile-select" className="text-sm font-bold text-slate-900 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-orange-500" />3. Prompt Profile *</label>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <label htmlFor="prompt-profile-select" className="text-sm font-bold text-slate-900 flex items-center gap-2 min-w-0 break-words"><ShieldCheck className="w-4 h-4 text-orange-500" />3. Prompt Profile *</label>
               <button type="button" onClick={() => onNavigate({ route: 'settings-prompts' })} className="text-xs text-orange-600 hover:underline font-medium">編集・追加</button>
             </div>
-            <p id="prompt-profile-help" className="text-xs text-slate-500">Prompt ProfileはGrillの質問・出力方針を決めます。{promptProfiles.find((p) => p.id === selectedPromptId)?.description}</p>
+            <p id="prompt-profile-help" className="text-xs text-slate-500 leading-relaxed break-words">Prompt ProfileはGrillの質問・出力方針を決めます。{promptProfiles.find((p) => p.id === selectedPromptId)?.description}</p>
             <select id="prompt-profile-select" value={selectedPromptId} onChange={(e) => setSelectedPromptId(e.target.value)} aria-required="true" aria-describedby={validationErrorField === 'prompt-profile-select' ? 'start-form-error' : 'prompt-profile-help'} aria-invalid={validationErrorField === 'prompt-profile-select'} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30">
               {promptProfiles.map((p) => <option key={p.id} value={p.id}>{p.name} {p.builtIn ? '(組み込み)' : '(カスタム)'}</option>)}
             </select>
           </div>
           {/* API profile + model selection */}
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <label htmlFor="api-profile-select" className="text-sm font-bold text-slate-900 flex items-center gap-2"><Key className="w-4 h-4 text-orange-500" />4. API Profile *</label>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <label htmlFor="api-profile-select" className="text-sm font-bold text-slate-900 flex items-center gap-2 min-w-0 break-words"><Key className="w-4 h-4 text-orange-500" />4. API Profile *</label>
               <button type="button" onClick={() => onNavigate({ route: 'settings-apis' })} className="text-xs text-orange-600 hover:underline font-medium">管理・追加</button>
             </div>
-            <p id="api-profile-help" className="text-xs text-slate-500">API Profileが利用可能なモデルを決めます。</p>
+            <p id="api-profile-help" className="text-xs text-slate-500 break-words">API Profileが利用可能なモデルを決めます。</p>
             <select id="api-profile-select" value={selectedProfileId} onChange={(e) => handleProfileChange(e.target.value)} aria-required="true" aria-describedby={validationErrorField === 'api-profile-select' ? 'start-form-error' : 'api-profile-help'} aria-invalid={validationErrorField === 'api-profile-select'} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30">
               {apiProfiles.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.id === MOCK_API_PROFILE.id ? '内蔵モック' : p.baseUrl})</option>)}
             </select>
@@ -425,16 +425,16 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
         )}
 
         {/* Start button */}
-        <div className="flex justify-end pt-2">
+        <div className="flex justify-end pt-2 flex-wrap gap-3">
           <button
             id="start-grill-btn"
             type="submit"
             disabled={submitting || modelsLoading}
-            className="w-full sm:w-auto px-8 py-3.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-base rounded-xl shadow-lg shadow-orange-600/20 flex items-center justify-center gap-2 transition-transform active:scale-98 cursor-pointer"
+            className="min-w-0 w-full sm:w-auto px-8 py-3.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-base rounded-xl shadow-lg shadow-orange-600/20 flex items-center justify-center gap-2 transition-transform active:scale-98 cursor-pointer"
           >
-            <Flame className="w-5 h-5" />
-            <span>Grill を開始する</span>
-            <ArrowRight className="w-4 h-4" />
+            <Flame className="w-5 h-5 shrink-0" />
+            <span className="min-w-0">Grill を開始する</span>
+            <ArrowRight className="w-4 h-4 shrink-0" />
           </button>
         </div>
       </form>

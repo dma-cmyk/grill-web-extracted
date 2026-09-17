@@ -109,9 +109,9 @@ export const HandoffView: React.FC<HandoffViewProps> = ({ sessionId, onNavigate 
   return (
     <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 space-y-6">
       {/* Top navigation & action header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5 min-w-0">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={() => onNavigate({ route: 'grill', sessionId: session.id })}
               className="text-xs text-slate-500 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
@@ -120,7 +120,7 @@ export const HandoffView: React.FC<HandoffViewProps> = ({ sessionId, onNavigate 
               Grill対話へ戻る
             </button>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2 break-words min-w-0">
             <FileText className="w-6 h-6 text-emerald-600" />
             Agent Handoff Prompt (実行用プロンプト)
           </h1>
@@ -129,7 +129,7 @@ export const HandoffView: React.FC<HandoffViewProps> = ({ sessionId, onNavigate 
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
           <button
             id="copy-handoff-btn"
             onClick={handleCopy}
@@ -158,7 +158,7 @@ export const HandoffView: React.FC<HandoffViewProps> = ({ sessionId, onNavigate 
       )}
 
       {/* Metadata summary bar */}
-      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-600">
+      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-600 min-w-0">
         <div className="flex items-center gap-4 flex-wrap">
           <span>テーマ: <strong className="text-slate-900">{session.theme.slice(0, 40)}{session.theme.length > 40 ? '...' : ''}</strong></span>
           <span>総ラウンド: <strong className="text-slate-900">{session.rounds.length}</strong></span>
@@ -213,7 +213,7 @@ export const HandoffView: React.FC<HandoffViewProps> = ({ sessionId, onNavigate 
       )}
 
       {/* Footer next action */}
-      <div className="pt-4 flex justify-between items-center text-xs text-slate-500">
+      <div className="pt-4 flex justify-between items-center text-xs text-slate-500 flex-wrap gap-3">
         <button
           onClick={() => onNavigate({ route: 'sessions' })}
           className="hover:text-slate-900 flex items-center gap-1 cursor-pointer"

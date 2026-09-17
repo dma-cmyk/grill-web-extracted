@@ -329,7 +329,7 @@ export const ApiProfilesView: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5 min-w-0">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <Key className="w-6 h-6 text-orange-500" />
@@ -350,9 +350,9 @@ export const ApiProfilesView: React.FC = () => {
       </div>
 
       {/* Security notice banner */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs sm:text-sm text-amber-900 flex items-start gap-3">
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs sm:text-sm text-amber-900 flex items-start gap-3 min-w-0">
         <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0 break-words">
           <p className="font-semibold text-amber-950">ローカルファーストとセキュリティ方針</p>
           <p className="text-amber-800">
             Grill-Webはクライアント完結のSPAです。入力されたAPIキーや対話内容はサーバーに送られず、ブラウザから指定のBase URLへ直接送信されます（接続先がCORSを許可している必要があります）。APIキーのブラウザ保存はデフォルトでOFFです。
@@ -403,11 +403,11 @@ export const ApiProfilesView: React.FC = () => {
               <div
                 key={p.id}
                 id={`profile-card-${p.id}`}
-                className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-300 transition-colors"
+                className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-300 transition-colors min-w-0"
               >
                 <div className="space-y-1.5 min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-slate-900 text-base">{p.name}</h3>
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <h3 className="font-semibold text-slate-900 text-base break-words min-w-0">{p.name}</h3>
                     {isMock ? (
                       <span className="text-[11px] px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 font-medium">
                         内蔵検証用モック
@@ -427,7 +427,7 @@ export const ApiProfilesView: React.FC = () => {
                     )}
                   </div>
                   <p className="text-xs font-mono text-slate-500 break-all">{p.baseUrl}</p>
-                  <div className="flex items-center gap-4 text-xs text-slate-500 pt-1">
+                  <div className="flex items-center gap-4 text-xs text-slate-500 pt-1 flex-wrap">
                     <span className="flex items-center gap-1">
                       <Cpu className="w-3.5 h-3.5 text-slate-400" />
                       モデル: {modelCount > 0 ? `${modelCount}件キャッシュ済み` : '未取得（モデル取得で一覧を取得）'}
@@ -458,7 +458,7 @@ export const ApiProfilesView: React.FC = () => {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap w-full md:w-auto">
                   <button
                     onClick={() => handleFetchModels(p)}
                     disabled={isFetching}
@@ -501,14 +501,14 @@ export const ApiProfilesView: React.FC = () => {
           titleId="api-profile-delete-title"
           descriptionId="api-profile-delete-desc"
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4"
-          panelClassName="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4"
+          panelClassName="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto"
         >
           <h3 id="api-profile-delete-title" className="text-lg font-bold text-slate-900">Profileの削除確認</h3>
           <p id="api-profile-delete-desc" className="text-sm text-slate-600 leading-relaxed">
             このAPI Profileと関連するモデルキャッシュを削除しますか？<br />
             <span className="text-xs text-slate-500">※ このProfileを使用して作成された過去のセッションデータは削除されず保持されます。</span>
           </p>
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3 pt-2 flex-wrap">
             <button
               onClick={() => setDeleteConfirmId(null)}
               className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
@@ -532,9 +532,9 @@ export const ApiProfilesView: React.FC = () => {
           onClose={() => setEditingProfile(null)}
           titleId="api-profile-edit-title"
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto"
-          panelClassName="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 my-8"
+          panelClassName="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 my-8 max-h-[calc(100vh-2rem)] overflow-y-auto"
         >
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 min-w-0 flex-wrap">
             <h2 id="api-profile-edit-title" className="text-lg font-bold text-slate-900">
               {editingProfile.id ? 'API Profile の編集' : '新規 API Profile の登録'}
             </h2>
@@ -657,7 +657,7 @@ export const ApiProfilesView: React.FC = () => {
 
             {/* Custom Headers */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
                 <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   カスタムヘッダー (任意)
                 </span>
@@ -672,7 +672,7 @@ export const ApiProfilesView: React.FC = () => {
               {editingProfile.headers && editingProfile.headers.length > 0 && (
                 <div className="space-y-2">
                   {editingProfile.headers.map((h, idx) => (
-                    <div key={`header-${idx}`} className="flex items-center gap-2">
+                    <div key={`header-${idx}`} className="flex items-center gap-2 min-w-0 flex-wrap">
                       <label htmlFor={`${baseId}-header-key-${idx}`} className="sr-only">ヘッダー名 {idx + 1}</label>
                       <input
                         id={`${baseId}-header-key-${idx}`}
@@ -680,7 +680,7 @@ export const ApiProfilesView: React.FC = () => {
                         placeholder="Header-Name"
                         value={h.key}
                         onChange={(e) => updateHeaderRow(idx, e.target.value, h.value)}
-                        className="w-1/2 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+                        className="min-w-0 w-1/2 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
                       />
                       <label htmlFor={`${baseId}-header-val-${idx}`} className="sr-only">ヘッダー値 {idx + 1}</label>
                       <input
@@ -689,7 +689,7 @@ export const ApiProfilesView: React.FC = () => {
                         placeholder="Header-Value"
                         value={h.value}
                         onChange={(e) => updateHeaderRow(idx, h.key, e.target.value)}
-                        className="w-1/2 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono"
+                        className="min-w-0 w-1/2 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono"
                       />
                       <button
                         type="button"
@@ -738,7 +738,7 @@ export const ApiProfilesView: React.FC = () => {
             </div>
 
             {/* Modal buttons */}
-            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 flex-wrap">
               <button
                 type="button"
                 onClick={() => setEditingProfile(null)}
