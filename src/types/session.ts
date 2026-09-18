@@ -1,3 +1,4 @@
+import type { ReasoningEffort } from '../core/reasoningEffort';
 import { GrillRound, QuestionAnswer } from './grillRound';
 
 export type GrillStatus =
@@ -19,6 +20,7 @@ export interface SelectionSnapshot {
   promptProfileId: string;
   promptProfileName: string;
   depth: 'quick' | 'standard' | 'deep';
+  reasoningEffort?: ReasoningEffort;
 }
 
 export interface ChatAttachmentPayload {
