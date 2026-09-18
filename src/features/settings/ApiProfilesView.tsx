@@ -182,6 +182,9 @@ export const ApiProfilesView: React.FC = () => {
       const maskedModels = models.map((model) => ({
         id: maskPlainSecrets(model.id, secrets),
         name: maskPlainSecrets(model.name, secrets),
+        ...(model.supportedReasoningEfforts
+          ? { supportedReasoningEfforts: model.supportedReasoningEfforts }
+          : {}),
       }));
       await apiProfileRepo.saveCachedModels(profile.id, maskedModels);
 
