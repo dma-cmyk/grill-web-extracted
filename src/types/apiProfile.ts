@@ -1,3 +1,5 @@
+import type { ReasoningEffort } from '../core/reasoningEffort';
+
 export interface CustomHeader {
   key: string;
   value: string;
@@ -20,4 +22,5 @@ export interface ModelCacheItem {
   modelId: string;
   displayName: string;
   fetchedAt: number;
+  supportedReasoningEfforts?: ReasoningEffort[];
 }
