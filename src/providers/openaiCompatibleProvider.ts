@@ -2,6 +2,7 @@ import { ILlmProvider, ModelInfo, ProviderError, ProviderErrorCode, StreamChatPa
 import { ApiProfile } from '../types/apiProfile';
 import { ChatAttachmentPayload, ChatMessage } from '../types/session';
 import { formatBytes } from '../core/attachmentValidation';
+import { parseSupportedReasoningEfforts } from '../core/reasoningEffort';
 import { containsShortSecret, maskPlainSecrets, maskSecrets, maskStreamingFragment, maskStreamingText, sanitizeErrorDetails, sanitizeHeaders, validateBaseUrl } from '../security/masking';
 import { processSseStream, processSseText } from './sseStream';
 
@@ -286,15 +287,23 @@ export class OpenAICompatibleProvider implements ILlmProvider {
 
       const json = await response.json();
       if (Array.isArray(json.data)) {
-        return json.data.map((m: any) => ({
-          id: maskPlainSecrets(m.id || String(m), secrets),
-          name: maskPlainSecrets(m.id || m.name || String(m), secrets),
-        }));
+        return json.data.map((m: any) => {
+          const supportedReasoningEfforts = parseSupportedReasoningEfforts(m);
+          return {
+            id: maskPlainSecrets(m.id || String(m), secrets),
+            name: maskPlainSecrets(m.id || m.name || String(m), secrets),
+            ...(supportedReasoningEfforts ? { supportedReasoningEfforts } : {}),
+          };
+        });
       } else if (Array.isArray(json.models)) {
-        return json.models.map((m: any) => ({
-          id: maskPlainSecrets(m.id || m.name || String(m), secrets),
-          name: maskPlainSecrets(m.displayName || m.name || m.id || String(m), secrets),
-        }));
+        return json.models.map((m: any) => {
+          const supportedReasoningEfforts = parseSupportedReasoningEfforts(m);
+          return {
+            id: maskPlainSecrets(m.id || m.name || String(m), secrets),
+            name: maskPlainSecrets(m.displayName || m.name || m.id || String(m), secrets),
+            ...(supportedReasoningEfforts ? { supportedReasoningEfforts } : {}),
+          };
+        });
       }
 
       return [];

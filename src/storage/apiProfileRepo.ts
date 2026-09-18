@@ -1,5 +1,6 @@
 import { db } from './db';
 import { ApiProfile, ModelCacheItem } from '../types/apiProfile';
+import type { ReasoningEffort } from '../core/reasoningEffort';
 import { inMemoryKeyStore } from '../security/inMemoryKeyStore';
 import { maskPlainSecrets } from '../security/masking';
 
@@ -61,7 +62,7 @@ export const apiProfileRepo = {
     }));
   },
 
-  async saveCachedModels(apiProfileId: string, models: Array<{ id: string; name: string }>): Promise<void> {
+  async saveCachedModels(apiProfileId: string, models: Array<{ id: string; name: string; supportedReasoningEfforts?: ReasoningEffort[] }>): Promise<void> {
     const now = Date.now();
     const profile = await apiProfileRepo.getById(apiProfileId);
     const secrets = profile ? [profile.apiKey, ...(profile.headers || []).map((header) => header.value)] : [];
@@ -73,6 +74,9 @@ export const apiProfileRepo = {
         modelId: maskPlainSecrets(m.id, secrets),
         displayName: maskPlainSecrets(m.name || m.id, secrets),
         fetchedAt: now,
+        ...(m.supportedReasoningEfforts?.length
+          ? { supportedReasoningEfforts: m.supportedReasoningEfforts }
+          : {}),
       }));
       await db.modelCache.bulkPut(items);
     });
