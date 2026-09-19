@@ -2,9 +2,11 @@ import { ILlmProvider, ModelInfo, ProviderError, ProviderErrorCode, StreamChatPa
 import { ApiProfile } from '../types/apiProfile';
 import { ChatAttachmentPayload, ChatMessage } from '../types/session';
 import { formatBytes } from '../core/attachmentValidation';
-import { parseSupportedReasoningEfforts } from '../core/reasoningEffort';
+import { REASONING_EFFORT_VALUES, parseSupportedReasoningEfforts, validateReasoningEffort } from '../core/reasoningEffort';
 import { containsShortSecret, maskPlainSecrets, maskSecrets, maskStreamingFragment, maskStreamingText, sanitizeErrorDetails, sanitizeHeaders, validateBaseUrl } from '../security/masking';
 import { processSseStream, processSseText } from './sseStream';
+/** Transport-level vocabulary check only; model capability gating happens in the UI layer. */
+const ALL_REASONING_EFFORTS = [...REASONING_EFFORT_VALUES];
 
 type RequestMessagePart =
   | {
@@ -315,13 +317,22 @@ export class OpenAICompatibleProvider implements ILlmProvider {
   }
 
   async chat(params: StreamChatParams): Promise<string> {
-    const { profile, apiKey, model, messages, signal, onChunk } = params;
+    const { profile, apiKey, model, reasoningEffort, messages, signal, onChunk } = params;
     const hasCredentials = !!apiKey?.trim() || !!profile.apiKey?.trim() || (profile.headers || []).some((header) => !!header.value.trim());
     const urlValidation = validateBaseUrl(profile.baseUrl, hasCredentials);
     if (!urlValidation.valid) {
       const error: ProviderError = {
         code: 'INVALID_URL',
         message: urlValidation.error || '無効なURLです',
+        isRetryable: false,
+      };
+      throw error;
+    }
+    const effortCheck = validateReasoningEffort(reasoningEffort, ALL_REASONING_EFFORTS);
+    if (!effortCheck.valid) {
+      const error: ProviderError = {
+        code: 'INVALID_PARAM',
+        message: effortCheck.error ?? '推論 effort の指定が無効です',
         isRetryable: false,
       };
       throw error;
@@ -341,6 +352,7 @@ export class OpenAICompatibleProvider implements ILlmProvider {
       messages: formattedMessages,
       temperature: 0.7,
       stream: true,
+      ...(effortCheck.effort ? { reasoning_effort: effortCheck.effort } : {}),
     };
 
     try {
