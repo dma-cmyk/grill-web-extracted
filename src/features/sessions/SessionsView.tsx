@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { RoutePath } from '../../app/router';
 import { SessionRecord } from '../../types/session';
 import { sessionRepo } from '../../storage/sessionRepo';
+import { describeReasoningEffort } from '../../core/reasoningEffort';
 import { Dialog } from '../../components/Dialog';
 import {
   Layers,
@@ -161,6 +162,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({ onNavigate }) => {
                       <Cpu className="w-3.5 h-3.5 text-slate-400" />
                       {s.selectionSnapshot.modelName}
                     </span>
+                    <span>Effort: <strong className="text-slate-700">{describeReasoningEffort(s.selectionSnapshot.reasoningEffort)}</strong></span>
                     <span>確定事項: <strong className="text-slate-700">{s.decisions.length}件</strong></span>
                     <span>進捗: <strong className="text-slate-700">{s.progress}%</strong></span>
                   </div>
