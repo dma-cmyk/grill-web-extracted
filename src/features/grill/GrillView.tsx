@@ -13,6 +13,7 @@ import { getProviderForProfile } from '../../providers';
 import { buildInitialMessages, buildAnswersMessage, buildFollowUpMessage } from '../../core/promptBuilder';
 import { parseAndValidateGrillRound, buildRepairMessage } from '../../core/responseParser';
 import { generateAgentHandoffPrompt } from '../../core/handoffGenerator';
+import { describeReasoningEffort } from '../../core/reasoningEffort';
 import { maskResponseText, maskStreamingText } from '../../security/masking';
 import {
   Flame,
@@ -296,6 +297,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
       profile,
       apiKey: effectiveKey,
       model: s.selectionSnapshot.modelId,
+      ...(s.selectionSnapshot.reasoningEffort ? { reasoningEffort: s.selectionSnapshot.reasoningEffort } : {}),
       messages: s.messages,
       signal: controller.signal,
       onChunk: (chunk, accumulated) => {
@@ -905,6 +907,7 @@ export const GrillView: React.FC<GrillViewProps> = ({ sessionId, onNavigate, aut
             <span>Model: <strong className="text-slate-700 font-mono">{session.selectionSnapshot.modelName}</strong></span>
             <span>API: <strong className="text-slate-700">{session.selectionSnapshot.apiProfileName}</strong></span>
             <span>Depth: <strong className="text-slate-700 uppercase">{session.selectionSnapshot.depth}</strong></span>
+            <span>Effort: <strong className="text-slate-700">{describeReasoningEffort(session.selectionSnapshot.reasoningEffort)}</strong></span>
           </div>
         </div>
 
