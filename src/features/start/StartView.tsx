@@ -13,7 +13,8 @@ import { inMemoryKeyStore } from '../../security/inMemoryKeyStore';
 import { maskPlainSecrets } from '../../security/masking';
 import { MOCK_API_PROFILE } from '../../providers/mockProvider';
 import { ATTACHMENT_ACCEPT_ATTRIBUTE, describeAttachmentLimits, formatBytes, validateAttachmentFile } from '../../core/attachmentValidation';
-import { Flame, Play, Sparkles, Sliders, ShieldCheck, Key, ArrowRight, HelpCircle, Search } from 'lucide-react';
+import { reasoningEffortOptions, validateReasoningEffort, ReasoningEffortSelection } from '../../core/reasoningEffort';
+import { Flame, Play, Sparkles, Sliders, Gauge, ShieldCheck, Key, ArrowRight, HelpCircle, Search } from 'lucide-react';
 
 interface StartViewProps {
   onNavigate: (route: RoutePath) => void;
@@ -30,6 +31,7 @@ const normalizeModelSearchValue = (value: string) => value.normalize('NFKC').toL
 export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
   const [theme, setTheme] = useState('');
   const [depth, setDepth] = useState<SelectionSnapshot['depth']>('standard');
+  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffortSelection>('auto');
   const [apiProfiles, setApiProfiles] = useState<ApiProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string>('');
   const [cachedModels, setCachedModels] = useState<ModelCacheItem[]>([]);
@@ -98,12 +100,20 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
     setModelQuery('');
     setCachedModels([]);
     setSelectedModelId('');
+    setReasoningEffort('auto');
     setModelsLoading(true);
     const models = await apiProfileRepo.getCachedModels(profileId);
     if (profileLoadGenerationRef.current !== generation) return;
     setCachedModels(models);
     setSelectedModelId(models.length > 0 ? models[0].modelId : 'gpt-4o');
     setModelsLoading(false);
+  };
+
+  const handleModelChange = (modelId: string) => {
+    setSelectedModelId(modelId);
+    // Keep the selection only when the newly selected model declares it; otherwise fall back to AUTO.
+    const nextSupported = cachedModels.find((model) => model.modelId === modelId)?.supportedReasoningEfforts;
+    setReasoningEffort((current) => (current !== 'auto' && nextSupported?.includes(current) ? current : 'auto'));
   };
 
 
@@ -173,6 +183,8 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
       })
     : cachedModels;
   const selectedCachedModel = cachedModels.find((model) => model.modelId === selectedModelId);
+  const supportedReasoningEfforts = selectedCachedModel?.supportedReasoningEfforts;
+  const reasoningEffortChoices = reasoningEffortOptions(supportedReasoningEfforts);
   const visibleModels =
     selectedModelId !== '__custom__' && selectedModelId && !filteredCachedModels.some((model) => model.modelId === selectedModelId)
       ? selectedCachedModel
@@ -198,6 +210,11 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
     if (!effectiveModel) { fail('manual-model-input', 'モデルを選択または入力してください'); return; }
     const promptProfile = promptProfiles.find((p) => p.id === selectedPromptId) || promptProfiles[0];
     if (!promptProfile) { fail('prompt-profile-select', 'Prompt Profileを選択してください'); return; }
+    const effortValidation = validateReasoningEffort(reasoningEffort, supportedReasoningEfforts);
+    if (!effortValidation.valid) {
+      fail('reasoning-effort-group', effortValidation.error || '推論努力値が不正です');
+      return;
+    }
 
     // Save in-memory key if provided
     if (sessionApiKey.trim()) {
@@ -218,6 +235,7 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
       promptProfileId: promptProfile.id,
       promptProfileName: promptProfile.name,
       depth,
+      ...(effortValidation.effort ? { reasoningEffort: effortValidation.effort } : {}),
     };
 
     // Auto title from theme (first line or truncated)
@@ -396,7 +414,7 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
               {modelQuery && <button type="button" onClick={() => { setModelQuery(''); modelSearchInputRef.current?.focus(); }} className="absolute right-3 top-2.5 text-xs text-orange-600 hover:underline">クリア</button>}
             </div>
             <label htmlFor="model-select" className="sr-only">使用モデルを選択</label>
-            <select id="model-select" value={selectedModelId} onChange={(e) => setSelectedModelId(e.target.value)} aria-required="true" aria-describedby={validationErrorField === 'model-select' ? 'start-form-error' : 'model-search-status'} aria-invalid={validationErrorField === 'model-select'} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30">
+            <select id="model-select" value={selectedModelId} onChange={(e) => handleModelChange(e.target.value)} aria-required="true" aria-describedby={validationErrorField === 'model-select' ? 'start-form-error' : 'model-search-status'} aria-invalid={validationErrorField === 'model-select'} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-orange-500/30">
               {visibleModels.map((m, index) => <option key={`${m.modelId}-${index}`} value={m.modelId}>{m.displayName}</option>)}
               <option value="__custom__">-- 手動入力 (直接指定) --</option>
             </select>
@@ -406,7 +424,7 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
                 <p>一致するモデルがありません。検索条件をクリアするか、手動入力をお試しください。</p>
                 <div className="flex gap-3">
                   <button type="button" onClick={() => { setModelQuery(''); modelSearchInputRef.current?.focus(); }} className="text-orange-600 hover:underline">検索をクリア</button>
-                  <button type="button" onClick={() => setSelectedModelId('__custom__')} className="text-orange-600 hover:underline">手動入力を選択</button>
+                  <button type="button" onClick={() => handleModelChange('__custom__')} className="text-orange-600 hover:underline">手動入力を選択</button>
                 </div>
               </div>
             )}
@@ -417,6 +435,40 @@ export const StartView: React.FC<StartViewProps> = ({ onNavigate }) => {
               </div>
             )}
             <p className="text-xs text-slate-500">{cachedModels.length > 0 ? `${cachedModels.length}件の取得済みモデルから選択中` : 'モデル一覧は「API設定」画面で取得・更新できます'}</p>
+          </div>
+          {/* Reasoning effort selection (candidates come from the model's own declaration) */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <div id="reasoning-effort-group-label" className="text-sm font-bold text-slate-900 flex items-center gap-2 min-w-0 break-words">
+              <Gauge className="w-4 h-4 text-orange-500" />
+              5. 推論努力 (Reasoning Effort)
+            </div>
+            <div
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-labelledby="reasoning-effort-group-label"
+              aria-describedby={validationErrorField === 'reasoning-effort-group' ? 'start-form-error' : 'reasoning-effort-help'}
+              aria-invalid={validationErrorField === 'reasoning-effort-group'}
+            >
+              {reasoningEffortChoices.map((option) => (
+                <button
+                  key={option}
+                  id={`reasoning-effort-${option}`}
+                  type="button"
+                  aria-pressed={reasoningEffort === option}
+                  onClick={() => setReasoningEffort(option)}
+                  className={`px-4 py-2.5 rounded-xl border text-center transition-all cursor-pointer text-sm ${reasoningEffort === option ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}
+                >
+                  {option.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <p id="reasoning-effort-help" className="text-xs text-slate-500 leading-relaxed break-words">
+              {modelsLoading
+                ? 'モデル一覧を読み込み中です...'
+                : reasoningEffortChoices.length === 1
+                  ? '選択中のモデルは推論努力値を申告していないため、AUTO のみ選択できます。'
+                  : 'モデルが申告した候補のみを表示します。AUTO では推論努力値を指定せず、モデルの既定に従います。'}
+            </p>
           </div>
         </div>
 
